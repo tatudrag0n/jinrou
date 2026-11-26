@@ -181,6 +181,7 @@ td,th{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left}
     <h3>経過</h3>
     <div class="log" id="ogLog"></div>
   </div>
+  <button class="sub" id="btnHelp3">📖 役職とルールの説明を見る</button>
   <button class="sub" id="ogLeave">部屋を出る（トップに戻る）</button>
 </section>
 
@@ -717,7 +718,8 @@ let helpReturn="scr-setup";
 function openHelp(from){ helpReturn=from; show("scr-help"); }
 $("btnHelp1").onclick=()=>openHelp("scr-setup");
 $("btnHelp2").onclick=()=>openHelp("scr-online");
-$("btnHelpBack").onclick=()=>show(helpReturn);
+$("btnHelp3").onclick=()=>openHelp("scr-ogame");
+$("btnHelpBack").onclick=()=>{ show(helpReturn); if(helpReturn==="scr-ogame") refreshOnline(); };
 $("btnGoOnline").onclick=()=>{ show("scr-online"); };
 $("btnBackLocal").onclick=()=>{ show("scr-setup"); };
 async function api(path, opts){
