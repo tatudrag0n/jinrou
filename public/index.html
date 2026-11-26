@@ -80,7 +80,7 @@ td,th{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left}
   </div>
   <div class="card">
     <h2>③ オプション</h2>
-    <label style="display:block;line-height:2"><input type="checkbox" id="optFirstNightGuard" checked> 初日の夜も騎士は護衛できる</label>
+    <p class="muted">ハウスルール：初日の夜は人狼の襲撃はありません（初日襲いなし）。騎士の役職はありません。</p>
     <label style="display:block;line-height:2"><input type="checkbox" id="optSeerFirstRandom"> 初日の夜の占いは「ランダム占い」（占い師が選ばずGMがランダムに1人を占う ※人狼は出ません）</label>
     <label style="display:block;line-height:2">昼の議論タイマー：<select id="optTimer"><option value="0">なし</option><option value="180">3分</option><option value="300" selected>5分</option><option value="600">10分</option></select></label>
   </div>
@@ -235,7 +235,7 @@ const ROLE_ORDER = ["wolf","seer","knight","medium","madman","villager"];
 function defaultRoles(n){
   // n: 4..15
   const wolves = n>=13?3:(n>=7?2:1);
-  const cfg = {wolf:wolves, seer:1, knight:n>=6?1:0, medium:n>=9?1:0, madman:n>=7?1:0, villager:0};
+  const cfg = {wolf:wolves, seer:1, knight:0, medium:n>=9?1:0, madman:n>=7?1:0, villager:0};
   let used = cfg.wolf+cfg.seer+cfg.knight+cfg.medium+cfg.madman;
   cfg.villager = n-used;
   return cfg;
@@ -282,7 +282,7 @@ function buildNames(){
 function buildRoleConfig(){
   const n = parseInt(pcSel.value,10);
   const box = $("roleConfig"); box.innerHTML="";
-  ROLE_ORDER.forEach(key=>{
+  ROLE_ORDER.filter(k=>k!=="knight").forEach(key=>{
     const r=ROLES[key];
     const row=document.createElement("div"); row.className="stepper";
     row.innerHTML = "<div>"+r.icon+" <b>"+r.name+"</b> <span class='muted'>"+r.teamLabel+"</span></div>";
@@ -351,7 +351,7 @@ $("btnStart").onclick=()=>{
   const total=ROLE_ORDER.reduce((a,k)=>a+roleCfg[k],0);
   if(total!==n) return;
   S=newState();
-  S.options={ firstNightGuard:$("optFirstNightGuard").checked, seerFirstRandom:$("optSeerFirstRandom").checked, timer:parseInt($("optTimer").value,10) };
+  S.options={ firstNightGuard:false, seerFirstRandom:$("optSeerFirstRandom").checked, timer:parseInt($("optTimer").value,10) };
   const names=[];
   for(let i=0;i<n;i++){ const v=($("name-"+i).value||"").trim(); names.push(v||("プレイヤー"+(i+1))); }
   if(new Set(names).size!==names.length){ alert("名前が重複しています。名前を変えてください。"); return; }
@@ -393,9 +393,10 @@ function startNight(){
 function buildNightQueue(){
   const q=[];
   const wolves=aliveWolves();
-  wolves.forEach((w,i)=>{ if(i===0) q.push({type:"wolf", player:w}); }); // representative wolf decides (discussed in person beforehand is not possible locally; first wolf decides, others confirm view)
-  // Actually: let every wolf see target choice of first? Keep simple: first wolf chooses, other wolves get a pass-view of the choice.
-  for(let i=1;i<wolves.length;i++) q.push({type:"wolfInfo", player:wolves[i]});
+  if(S.day>1){ // 初日襲いなし：初日の夜は人狼の襲撃ステップ自体がない
+    wolves.forEach((w,i)=>{ if(i===0) q.push({type:"wolf", player:w}); });
+    for(let i=1;i<wolves.length;i++) q.push({type:"wolfInfo", player:wolves[i]});
+  }
   const seer=S.players.find(p=>p.alive&&p.role==="seer");
   if(seer) q.push({type:"seer", player:seer});
   const knight=S.players.find(p=>p.alive&&p.role==="knight");
@@ -491,6 +492,9 @@ function resolveNight(){
   } else if(victim && saved){
     body="<p style='font-size:18px'>朝になりました。<br>昨晩は襲撃がありましたが、<b>誰も死にませんでした</b>。</p>";
     log(S.day+"日目朝：襲撃は騎士の護衛で防がれた");
+  } else if(S.day===1) {
+    body="<p style='font-size:18px'>朝になりました。<br>初日の夜は襲撃がないため、<b>誰も死にませんでした</b>。</p>";
+    log(S.day+"日目朝：初日襲いなしのため死者なし");
   } else {
     body="<p style='font-size:18px'>朝になりました。<br>昨晩は<b>誰も死にませんでした</b>。</p>";
     log(S.day+"日目朝：死者なし");
@@ -632,7 +636,7 @@ function renderOnline(v){
   }
   // messages
   let msg="";
-  if(v.phase==="lobby") msg="<p>部屋コードを友達に教えてください。ホストが開始すると役職が配られます。役職構成は人数で自動決定されます。</p>";
+  if(v.phase==="lobby") msg="<p>部屋コードを友達に教えてください。ホストが開始すると役職が配られます。役職構成は人数で自動決定されます。ハウスルール：初日の夜は襲撃なし、騎士はいません。</p>";
   if(v.phase==="night") msg="<p>夜です。"+(v.action?"あなたの行動を選んでください。":(v.waitInfo||"他の人の行動を待っています…"))+"</p>";
   if(v.phase==="morning") msg="<p style='font-size:17px'>"+v.morningMsg+"</p><p class='muted'>ホストが次へ進めると議論が始まります。</p>";
   if(v.phase==="discussion") msg="<p>議論してください。チャット機能はないので、通話や対面で話してください。ホストが投票に進めます。</p>";
