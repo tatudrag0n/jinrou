@@ -57,6 +57,9 @@ td,th{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left}
 <!-- SETUP -->
 <section id="scr-setup">
   <div class="card">
+    <button id="btnHelp1" style="background:var(--card2);color:var(--text);border:1px solid var(--line)">📖 遊び方と役職の簡単な説明</button>
+  </div>
+  <div class="card">
     <h2>遊び方を選ぶ</h2>
     <button id="btnGoOnline" style="background:var(--blue);color:#fff">🌐 オンラインで遊ぶ（チャット機能なし）</button>
     <p class="muted" style="margin-top:8px">オンラインは部屋コードを共有して参加します。議論は通話や対面でしてください。このゲーム内にチャットはありません。下の設定は、1台を回して遊ぶローカルモード用です。</p>
@@ -89,6 +92,45 @@ td,th{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left}
 </section>
 
 
+
+<!-- HELP -->
+<section id="scr-help" class="hidden">
+  <div class="card">
+    <h2>📖 遊び方（簡単な説明）</h2>
+    <p>村人の中にまぎれた<b>人狼</b>を、話し合いで見つけて投票で処刑するゲームです。</p>
+    <h3 style="margin-top:14px">ゲームの流れ</h3>
+    <p>🌙 <b>夜</b>：人狼の襲撃、占いなど、役職の行動をします（初日の夜は襲撃なし）<br>
+    ☀️ <b>朝</b>：昨晩死んだ人が発表されます<br>
+    🗣️ <b>昼</b>：全員で「誰が人狼か」を話し合います（チャット機能はないので、対面や通話で）<br>
+    🗳️ <b>投票</b>：1人ずつ投票し、いちばん票を集めた人が処刑されます（同票なら処刑なし）<br>
+    これを決着まで繰り返します。</p>
+    <h3 style="margin-top:14px">勝利条件</h3>
+    <p>・<b>村人陣営</b>：人狼を全員処刑する<br>
+    ・<b>人狼陣営</b>：人狼と村人側が同じ数になる<br>
+    ・<b>妖狐陣営</b>：どちらの決着でも、妖狐が最後まで生きていれば妖狐の勝ち<br>
+    ・<b>てるてる坊主</b>：投票で処刑されると勝ち</p>
+    <h3 style="margin-top:14px">このゲームのルール</h3>
+    <p>・初日の夜は人狼の襲撃がありません<br>・騎士の役職はありません</p>
+  </div>
+  <div class="card">
+    <h2>役職の簡単な説明</h2>
+    <table>
+      <tr><td>🐺 <b>人狼</b></td><td>夜に1人を襲います。昼は村人のふりをします。</td></tr>
+      <tr><td>🧑‍🌾 <b>村人</b></td><td>能力はありません。話し合いで人狼を探します。</td></tr>
+      <tr><td>🔮 <b>占い師</b></td><td>夜に1人を占い、その人が人狼かどうか分かります。</td></tr>
+      <tr><td>👻 <b>霊媒師</b></td><td>処刑された人が人狼だったかどうか分かります。</td></tr>
+      <tr><td>🐱 <b>猫又</b></td><td>ゲーム中1回だけ、死んだ人を生き返らせられます。</td></tr>
+      <tr><td>🃏 <b>狂人</b></td><td>人狼陣営の人間。人狼を勝たせると勝ち。占いでは「人狼ではない」と出ます。</td></tr>
+      <tr><td>👁️ <b>狂信者</b></td><td>人狼陣営。人狼が誰か分かります（人狼からは分かりません）。</td></tr>
+      <tr><td>🦊 <b>妖狐</b></td><td>襲われても死にませんが、占われると死にます。最後まで生き残れば勝ちです。</td></tr>
+      <tr><td>😈 <b>背徳者</b></td><td>妖狐の味方。妖狐が誰か分かり、妖狐が死ぬと一緒に死にます。</td></tr>
+      <tr><td>🌤️ <b>てるてる坊主</b></td><td>処刑されると勝ちです。襲われて死ぬと負けです。</td></tr>
+    </table>
+    <p class="muted" style="margin-top:8px">占い・霊媒では、人狼以外は全員「人狼ではない」と出ます。</p>
+    <button id="btnHelpBack">戻る</button>
+  </div>
+</section>
+
 <!-- ONLINE HOME -->
 <section id="scr-online" class="hidden">
   <div class="card">
@@ -101,6 +143,7 @@ td,th{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left}
     <input type="text" id="onRoomCode" maxlength="4" placeholder="部屋コード（例：AB3K）" style="text-transform:uppercase">
     <button class="sub" id="btnJoinRoom">この部屋に参加する</button>
     <p id="onError" style="color:var(--red);font-size:14px;margin-top:8px"></p>
+    <button class="sub" id="btnHelp2">📖 遊び方と役職の簡単な説明</button>
     <button class="sub" id="btnBackLocal">ローカルモードに戻る</button>
   </div>
 </section>
@@ -270,7 +313,7 @@ function aliveNonWolves(){ return S.players.filter(p=>p.alive && p.role!=="wolf"
 function log(msg){ S.log.push(msg); }
 function $(id){ return document.getElementById(id); }
 function show(id){
-  ["scr-setup","scr-pass","scr-role","scr-action","scr-gm","scr-log","scr-end","scr-online","scr-ogame"].forEach(s=>$(s).classList.toggle("hidden", s!==id));
+  ["scr-setup","scr-pass","scr-role","scr-action","scr-gm","scr-log","scr-end","scr-online","scr-ogame","scr-help"].forEach(s=>$(s).classList.toggle("hidden", s!==id));
   window.scrollTo(0,0);
 }
 
@@ -663,6 +706,11 @@ const ROLE_ICONS={wolf:"🐺",madman:"🃏",seer:"🔮",knight:"🛡️",medium:
 const ROLE_NAMES={wolf:"人狼",seer:"占い師",medium:"霊媒師",madman:"狂人",fanatic:"狂信者",fox:"妖狐",haitoku:"背徳者",nekomata:"猫又",teruteru:"てるてる坊主",villager:"村人"};
 const ONLINE_ROLE_KEYS=["wolf","seer","medium","madman","fanatic","fox","haitoku","nekomata","teruteru","villager"];
 let O=null, oTimer=null;
+let helpReturn="scr-setup";
+function openHelp(from){ helpReturn=from; show("scr-help"); }
+$("btnHelp1").onclick=()=>openHelp("scr-setup");
+$("btnHelp2").onclick=()=>openHelp("scr-online");
+$("btnHelpBack").onclick=()=>show(helpReturn);
 $("btnGoOnline").onclick=()=>{ show("scr-online"); };
 $("btnBackLocal").onclick=()=>{ show("scr-setup"); };
 async function api(path, opts){
