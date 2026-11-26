@@ -159,10 +159,7 @@ export class RoomDO {
           else if(n.kill===null) v.action={type:"wolf", title:"🐺 襲撃する人を選んでください", targets:this.nonWolves().map(p=>({id:p.id,name:p.name}))};
           else { v.acted=true; v.waitInfo="今晩の襲撃先は "+d.players[n.kill].name+" です"; }
         } else if(me.role==="seer"){
-          if(d.day===1){
-            if(!n.seerActed) v.action={type:"seerFirst", title:"🔮 初日の占いはランダム白です（ボタンを押すと結果が出ます）", targets:[]};
-            else v.acted=true;
-          }
+          if(d.day===1){ v.acted=true; v.waitInfo="初日の占いはランダム白で、結果は自動で表示されています"; }
           else if(!n.seerActed) v.action={type:"seer", title:"🔮 占う人を選んでください", targets:this.alive().filter(p=>p.id!==me.id).map(p=>({id:p.id,name:p.name}))};
           else v.acted=true;
         } else if(me.role==="knight"){
@@ -247,6 +244,17 @@ export class RoomDO {
       this.data.day=1; this.data.phase="night";
       this.data.night={kill:null, guard:null, seerActed:false, knightActed:false, nekoActed:false, revive:null, curseFox:null, firstWhite:null};
       this.data.night.firstWhite=this.pickFirstWhite();
+      // 初日占いはランダム白を自動表示：開始時点で占い師へ結果を渡し、初日の夜はそのまま朝へ進める（ボタン操作なし）
+      {
+        const seer=this.data.players.find(p=>p.role==="seer");
+        const fw=this.data.players[this.data.night.firstWhite];
+        if(seer && fw){
+          this.data.night.seerActed=true;
+          this.data.seerResults[seer.id]={targetName:fw.name, isWolf:false, day:1};
+          if(fw.role==="fox") this.data.night.curseFox=fw.id;
+        }
+        if(this.nightComplete()) await this.resolveNight();
+      }
       this.data.publicLog.push("ゲーム開始："+n+"人（"+ROLE_KEYS.filter(k=>cfg[k]).map(k=>ROLE_DEFS[k].name+"×"+cfg[k]).join(" ")+"）");
       await this.save();
       return json(this.view(me));
