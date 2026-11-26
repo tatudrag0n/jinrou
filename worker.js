@@ -4,11 +4,14 @@
 // There is intentionally NO endpoint that accepts free-text messages.
 const ROLE_DEFS = {
   wolf:{name:"人狼"}, madman:{name:"狂人"}, seer:{name:"占い師"},
-  knight:{name:"騎士"}, medium:{name:"霊媒師"}, villager:{name:"村人"}
+  knight:{name:"騎士"}, medium:{name:"霊媒師"}, villager:{name:"村人"},
+  fox:{name:"妖狐"}, haitoku:{name:"背徳者"}, fanatic:{name:"狂信者"},
+  nekomata:{name:"猫又"}, teruteru:{name:"てるてる坊主"}
 };
+const ROLE_KEYS = ["wolf","seer","medium","madman","fanatic","fox","haitoku","nekomata","teruteru","villager"];
 function defaultRoles(n){
   const wolves = n>=13?3:(n>=7?2:1);
-  const cfg = {wolf:wolves, seer:1, knight:0, medium:n>=9?1:0, madman:n>=7?1:0, villager:0}; // 騎士なし（本人指定ルール）
+  const cfg = {wolf:wolves, seer:1, knight:0, medium:n>=9?1:0, madman:n>=7?1:0, fox:0, haitoku:0, fanatic:0, nekomata:0, teruteru:0, villager:0}; // 騎士なし（本人指定ルール）
   cfg.villager = n - (cfg.wolf+cfg.seer+cfg.knight+cfg.medium+cfg.madman);
   return cfg;
 }
@@ -31,11 +34,24 @@ export class RoomDO {
   alive(){ return this.data.players.filter(p=>p.alive); }
   wolves(){ return this.data.players.filter(p=>p.alive && p.role==="wolf"); }
   nonWolves(){ return this.data.players.filter(p=>p.alive && p.role!=="wolf"); }
+  foxAlive(){ return this.data.players.some(p=>p.alive && p.role==="fox"); }
+  killFoxFollowers(){
+    // 背徳者は妖狐が死ぬと道連れで死ぬ
+    const d=this.data, dead=[];
+    if(!this.foxAlive()){
+      d.players.filter(p=>p.alive && p.role==="haitoku").forEach(p=>{ p.alive=false; dead.push(p); });
+    }
+    return dead;
+  }
   checkWin(){
     const w=this.wolves().length, v=this.nonWolves().length;
     if(this.data.phase==="lobby") return false;
-    if(w===0){ this.data.phase="end"; this.data.winner="village"; this.data.endReason="人狼が全員いなくなりました。"; return true; }
-    if(w>=v){ this.data.phase="end"; this.data.winner="wolf"; this.data.endReason="人狼の数が村人側と同数以上になりました。"; return true; }
+    if(w===0 || w>=v){
+      if(this.foxAlive()){ this.data.phase="end"; this.data.winner="fox"; this.data.endReason="ゲーム終了時に妖狐が生き残っていました。妖狐陣営の勝利です。"; }
+      else if(w===0){ this.data.phase="end"; this.data.winner="village"; this.data.endReason="人狼が全員いなくなりました。"; }
+      else { this.data.phase="end"; this.data.winner="wolf"; this.data.endReason="人狼の数が村人側と同数以上になりました。"; }
+      return true;
+    }
     return false;
   }
   nightComplete(){
@@ -45,17 +61,34 @@ export class RoomDO {
     const seerDone = !seer || n.seerActed;
     const knight = d.players.find(p=>p.alive&&p.role==="knight");
     const knightDone = !knight || n.knightActed; // online: knight can guard from night 1
-    return wolfDone && seerDone && knightDone;
+    const neko = d.players.find(p=>p.alive&&p.role==="nekomata"&&!p.nekoUsed);
+    const nekoDone = !neko || !d.players.some(p=>!p.alive) || n.nekoActed;
+    return wolfDone && seerDone && knightDone && nekoDone;
   }
   async resolveNight(){
     const d=this.data, n=d.night;
-    let msg="";
+    const deaths=[];
     if(n.kill!==null && n.kill!==undefined){
       const victim=d.players[n.kill];
-      if(n.guard===victim.id){ msg="昨晩は襲撃がありましたが、誰も死にませんでした。"; d.publicLog.push(d.day+"日目朝：襲撃は護衛で防がれた"); }
-      else { victim.alive=false; msg=victim.name+" さんが無残な姿で発見されました。"; d.publicLog.push(d.day+"日目朝："+victim.name+" が死亡"); }
-    } else { msg="昨晩は誰も死にませんでした。"; }
+      if(victim.role==="fox"){ d.publicLog.push(d.day+"日目朝：襲撃があったが死者なし（妖狐は襲撃で死なない）"); }
+      else if(n.guard===victim.id){ d.publicLog.push(d.day+"日目朝：襲撃は護衛で防がれた"); }
+      else { victim.alive=false; deaths.push(victim); }
+    }
+    if(n.curseFox!==null && n.curseFox!==undefined){
+      const fx=d.players[n.curseFox];
+      if(fx && fx.alive){ fx.alive=false; deaths.push(fx); d.publicLog.push(d.day+"日目朝：妖狐が呪殺された"); }
+    }
+    const followers=this.killFoxFollowers();
+    followers.forEach(p=>{ deaths.push(p); d.publicLog.push(d.day+"日目朝：背徳者が道連れで死亡"); });
+    let msg="";
+    if(deaths.length) msg=deaths.map(p=>p.name+" さん").join("、")+"が無残な姿で発見されました。";
+    else msg="昨晩は誰も死にませんでした。";
+    if(n.revive!==null && n.revive!==undefined){
+      const rv=d.players[n.revive];
+      if(rv && !rv.alive){ rv.alive=true; msg+=" そして、"+rv.name+" さんが蘇生しました！"; d.publicLog.push(d.day+"日目朝：猫又が "+rv.name+" を蘇生"); }
+    }
     d.morningMsg=msg;
+    deaths.forEach(p=>d.publicLog.push(d.day+"日目朝："+p.name+" が死亡"));
     d.lastGuard = (n.guard===undefined? null:n.guard);
     d.phase="morning";
     this.checkWin();
@@ -72,6 +105,14 @@ export class RoomDO {
       const t=d.players[tops[0]]; t.alive=false; d.lastExecuted=t.id;
       d.voteMsg=t.name+" さんが処刑されました。";
       d.publicLog.push(d.day+"日目："+t.name+" が処刑（"+detail+"）");
+      if(t.role==="teruteru"){
+        d.phase="voteResult"; d.winner="teruteru"; d.endReason=t.name+"（てるてる坊主）が処刑されました。てるてる坊主の単独勝利です。";
+        d.phase="end"; return;
+      }
+      if(t.role==="fox"){
+        const fol=this.killFoxFollowers();
+        if(fol.length){ d.voteMsg+=" さらに "+fol.map(p=>p.name).join("、")+" さんが死亡しました。"; d.publicLog.push(d.day+"日目：背徳者が道連れで死亡"); }
+      }
       // medium result (private)
       const med=d.players.find(p=>p.role==="medium");
       if(med) d.mediumResult={forId:med.id, targetName:t.name, isWolf:t.role==="wolf", day:d.day};
@@ -89,9 +130,12 @@ export class RoomDO {
       publicLog:d.publicLog, morningMsg:d.morningMsg||"", voteMsg:d.voteMsg||"", voteDetail:d.voteDetail||"",
       winner:d.winner||null, endReason:d.endReason||""
     };
+    v.roleCfg = d.roleCfg || defaultRoles(d.players.length);
     if(me && d.phase!=="lobby"){
       v.myRole=me.role; v.myRoleName=ROLE_DEFS[me.role].name;
       if(me.role==="wolf") v.wolfMates=d.players.filter(p=>p.role==="wolf"&&p.id!==me.id).map(p=>p.name);
+      if(me.role==="fanatic") v.wolfMates=d.players.filter(p=>p.role==="wolf").map(p=>p.name);
+      if(me.role==="haitoku"){ const fx=d.players.find(p=>p.role==="fox"); v.foxName=fx?fx.name:null; }
       if(d.seerResults && d.seerResults[me.id]) v.seerResult=d.seerResults[me.id];
       if(d.mediumResult && d.mediumResult.forId===me.id && me.role==="medium") v.mediumResult=d.mediumResult;
     }
@@ -110,6 +154,10 @@ export class RoomDO {
           else v.acted=true;
         } else if(me.role==="knight"){
           if(!n.knightActed) v.action={type:"knight", title:"🛡️ 護衛する人を選んでください", targets:this.alive().filter(p=>p.id!==me.id && p.id!==d.lastGuard).map(p=>({id:p.id,name:p.name}))};
+          else v.acted=true;
+        } else if(me.role==="nekomata"){
+          const dead=d.players.filter(p=>!p.alive);
+          if(!me.nekoUsed && dead.length && !n.nekoActed) v.action={type:"nekomata", title:"🐱 蘇生する人を選んでください（ゲーム中1回だけ・選ばなければスキップ扱い）", targets:dead.map(p=>({id:p.id,name:p.name}))};
           else v.acted=true;
         }
       } else if(d.phase==="voting"){
@@ -133,7 +181,7 @@ export class RoomDO {
       const pid=0;
       this.data={ room:url.searchParams.get("room")||"", hostId:pid, phase:"lobby", day:0,
         players:[{id:pid,name,token:token(),role:null,alive:true}],
-        night:null, votes:{}, publicLog:["部屋が作られました"], seerResults:{}, mediumResult:null,
+        night:null, votes:{}, publicLog:["部屋が作られました"], seerResults:{}, mediumResult:null, roleCfg:null,
         lastGuard:null, lastExecuted:null, morningMsg:"", voteMsg:"", voteDetail:"", winner:null, endReason:"" };
       await this.save();
       return json({room:this.data.room, pid, token:this.data.players[0].token});
@@ -161,18 +209,30 @@ export class RoomDO {
     // everything below needs auth in body
     const me=this.auth(body);
     if(!me) return json({error:"認証エラー"},401);
+    if(path==="/config"){
+      if(me.id!==this.data.hostId) return json({error:"ホストだけが役職を変更できます"},403);
+      if(this.data.phase!=="lobby") return json({error:"開始後は変更できません"},400);
+      const cfg={};
+      ROLE_KEYS.forEach(k=>{ const v=Math.max(0,Math.min(15,parseInt(body.cfg&&body.cfg[k],10)||0)); cfg[k]=v; });
+      this.data.roleCfg=cfg;
+      await this.save();
+      return json(this.view(me));
+    }
     if(path==="/start"){
       if(me.id!==this.data.hostId) return json({error:"ホストだけが開始できます"},403);
       if(this.data.phase!=="lobby") return json({error:"開始済みです"},400);
       const n=this.data.players.length;
       if(n<4) return json({error:"4人以上必要です"},400);
-      const cfg=defaultRoles(n);
+      const cfg=this.data.roleCfg || defaultRoles(n);
+      const cfgTotal=ROLE_KEYS.reduce((a,k)=>a+(cfg[k]||0),0);
+      if(cfgTotal!==n) return json({error:"役職の合計（"+cfgTotal+"）が人数（"+n+"）と一致していません"},400);
+      if(!cfg.wolf) return json({error:"人狼が0人です"},400);
       const deck=[]; Object.keys(cfg).forEach(k=>{ for(let i=0;i<cfg[k];i++) deck.push(k); });
       shuffle(deck);
       this.data.players.forEach((p,i)=>{ p.role=deck[i]; p.alive=true; });
       this.data.day=1; this.data.phase="night";
-      this.data.night={kill:null, guard:null, seerActed:false, knightActed:false};
-      this.data.publicLog.push("ゲーム開始："+n+"人（"+"人狼×"+cfg.wolf+" 占い師×"+cfg.seer+(cfg.knight?" 騎士×"+cfg.knight:"")+(cfg.medium?" 霊媒師×"+cfg.medium:"")+(cfg.madman?" 狂人×"+cfg.madman:"")+" 村人×"+cfg.villager+"）");
+      this.data.night={kill:null, guard:null, seerActed:false, knightActed:false, nekoActed:false, revive:null, curseFox:null};
+      this.data.publicLog.push("ゲーム開始："+n+"人（"+ROLE_KEYS.filter(k=>cfg[k]).map(k=>ROLE_DEFS[k].name+"×"+cfg[k]).join(" ")+"）");
       await this.save();
       return json(this.view(me));
     }
@@ -180,7 +240,15 @@ export class RoomDO {
       const d=this.data;
       if(d.phase!=="night" || !me.alive) return json({error:"今は夜の行動はできません"},400);
       const target=Number(body.target); const tp=d.players[target];
-      if(!tp || !tp.alive || tp.id===me.id) return json({error:"対象が不正です"},400);
+      if(me.role==="nekomata" && target===-1){
+        if(d.night.nekoActed) return json({error:"行動済みです"},400);
+        d.night.nekoActed=true; // 蘇生しない（能力は温存）
+        if(this.nightComplete()) await this.resolveNight();
+        await this.save();
+        return json(this.view(me));
+      }
+      if(!tp || tp.id===me.id) return json({error:"対象が不正です"},400);
+      if(me.role!=="nekomata" && !tp.alive) return json({error:"対象が不正です"},400);
       if(me.role==="wolf"){
         if(d.day===1) return json({error:"初日は襲撃できません"},400);
         if(d.night.kill!==null) return json({error:"襲撃先は決定済みです"},400);
@@ -190,6 +258,11 @@ export class RoomDO {
         if(d.night.seerActed) return json({error:"占い済みです"},400);
         d.night.seerActed=true;
         d.seerResults[me.id]={targetName:tp.name, isWolf:tp.role==="wolf", day:d.day};
+        if(tp.role==="fox") d.night.curseFox=tp.id; // 妖狐は占われると呪殺される（占い師には「人狼ではない」と出る）
+      } else if(me.role==="nekomata"){
+        if(me.nekoUsed || d.night.nekoActed) return json({error:"蘇生は使えません"},400);
+        if(tp.alive) return json({error:"死んだ人だけ蘇生できます"},400);
+        d.night.nekoActed=true; d.night.revive=target; me.nekoUsed=true;
       } else if(me.role==="knight"){
         if(d.night.knightActed) return json({error:"護衛済みです"},400);
         if(d.lastGuard===target) return json({error:"同じ人を2晩連続では護衛できません"},400);
@@ -204,7 +277,15 @@ export class RoomDO {
       if(d.phase!=="voting" || !me.alive) return json({error:"今は投票できません"},400);
       if(d.votes[me.id]!==undefined) return json({error:"投票済みです"},400);
       const target=Number(body.target); const tp=d.players[target];
-      if(!tp || !tp.alive || tp.id===me.id) return json({error:"対象が不正です"},400);
+      if(me.role==="nekomata" && target===-1){
+        if(d.night.nekoActed) return json({error:"行動済みです"},400);
+        d.night.nekoActed=true; // 蘇生しない（能力は温存）
+        if(this.nightComplete()) await this.resolveNight();
+        await this.save();
+        return json(this.view(me));
+      }
+      if(!tp || tp.id===me.id) return json({error:"対象が不正です"},400);
+      if(me.role!=="nekomata" && !tp.alive) return json({error:"対象が不正です"},400);
       d.votes[me.id]=target;
       if(Object.keys(d.votes).length>=this.alive().length) this.resolveVote();
       await this.save();
@@ -216,7 +297,7 @@ export class RoomDO {
       if(d.phase==="morning"){ d.phase="discussion"; }
       else if(d.phase==="discussion"){ d.phase="voting"; d.votes={}; }
       else if(d.phase==="voteResult"){
-        d.day++; d.phase="night"; d.night={kill:null, guard:null, seerActed:false, knightActed:false}; d.voteMsg=""; d.voteDetail="";
+        d.day++; d.phase="night"; d.night={kill:null, guard:null, seerActed:false, knightActed:false, nekoActed:false, revive:null, curseFox:null}; d.voteMsg=""; d.voteDetail="";
       } else return json({error:"今は進められません"},400);
       await this.save();
       return json(this.view(me));
