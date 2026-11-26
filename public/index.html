@@ -83,7 +83,7 @@ td,th{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left}
   </div>
   <div class="card">
     <h2>③ オプション</h2>
-    <p class="muted">ハウスルール：初日の夜は人狼の襲撃がなく、騎士も護衛できません（初日襲いなし・初日守りなし）。</p>
+    <p class="muted">ハウスルール：初日の夜は占いだけです（襲撃なし・護衛なし）。</p>
     <label style="display:block;line-height:2"><input type="checkbox" id="optSeerFirstRandom"> 初日の夜の占いは「ランダム占い」（占い師が選ばずGMがランダムに1人を占う ※人狼は出ません）</label>
     <label style="display:block;line-height:2">昼の議論タイマー：<select id="optTimer"><option value="0">なし</option><option value="180">3分</option><option value="300" selected>5分</option><option value="600">10分</option></select></label>
   </div>
@@ -99,7 +99,7 @@ td,th{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left}
     <h2>📖 遊び方（簡単な説明）</h2>
     <p>村人の中にまぎれた<b>人狼</b>を、話し合いで見つけて投票で処刑するゲームです。</p>
     <h3 style="margin-top:14px">ゲームの流れ</h3>
-    <p>🌙 <b>夜</b>：人狼の襲撃、占いなど、役職の行動をします（初日の夜は襲撃なし）<br>
+    <p>🌙 <b>夜</b>：人狼の襲撃、占いなど、役職の行動をします（初日の夜は占いだけ）<br>
     ☀️ <b>朝</b>：昨晩死んだ人が発表されます<br>
     🗣️ <b>昼</b>：全員で「誰が人狼か」を話し合います（チャット機能はないので、対面や通話で）<br>
     🗳️ <b>投票</b>：1人ずつ投票し、いちばん票を集めた人が処刑されます（同票なら処刑なし）<br>
@@ -110,7 +110,7 @@ td,th{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left}
     ・<b>妖狐陣営</b>：どちらの決着でも、妖狐が最後まで生きていれば妖狐の勝ち<br>
     ・<b>てるてる坊主</b>：投票で処刑されると勝ち</p>
     <h3 style="margin-top:14px">このゲームのルール</h3>
-    <p>・初日の夜は人狼の襲撃がありません<br>・初日の夜は騎士も護衛できません（2日目からはできます）</p>
+    <p>・初日の夜は占いだけです（襲撃も護衛もありません）<br>・2日目の夜からは襲撃・護衛など全部の行動があります</p>
   </div>
   <div class="card">
     <h2>役職の簡単な説明</h2>
@@ -453,6 +453,11 @@ function startNight(){
 }
 function buildNightQueue(){
   const q=[];
+  if(S.day===1){ // 初日の夜は占いだけ
+    const seer1=S.players.find(p=>p.alive&&p.role==="seer");
+    if(seer1) q.push({type:"seer", player:seer1});
+    return q;
+  }
   const wolves=aliveWolves();
   if(S.day>1){ // 初日襲いなし：初日の夜は人狼の襲撃ステップ自体がない
     wolves.forEach((w,i)=>{ if(i===0) q.push({type:"wolf", player:w}); });
@@ -514,11 +519,12 @@ function nightSteps(q, idx){
   } else if(step.type==="knight"){
     passTo(p,"夜の行動です。護衛する人を選んでください。",()=>{
       let targets=alivePlayers().filter(x=>x.id!==p.id).map(x=>({id:x.id,name:x.name, sub:(S.lastGuardTarget===x.id?"前夜に護衛したため選べません":"")}));
-      pickAction("🛡️ 護衛する人を選んでください","選んだ人は今晩襲撃されても死にません。自分は選べません。同じ人を2晩連続では護衛できません。",targets.filter(t=>S.lastGuardTarget!==t.id),(tid)=>{
+      pickAction("🛡️ 護衛する人を選んでください","選んだ人は今晩襲撃されても死にません。自分は選べません。同じ人を2晩連続では護衛できません。「対象を選ばない」を押すと今晩は誰も守りません。",targets.filter(t=>S.lastGuardTarget!==t.id),(tid)=>{
+        if(tid===null){ S.night.guard=null; log(S.day+"日目夜：騎士は誰も護衛しなかった"); nightSteps(q,idx+1); return; }
         S.night.guard=tid;
         log(S.day+"日目夜：騎士は "+S.players[tid].name+" を護衛");
         nightSteps(q,idx+1);
-      },{allowSkip:false});
+      });
     },"🌙");
   } else if(step.type==="nekomata"){
     passTo(p,"夜の行動です。蘇生するかどうか選んでください。",()=>{
@@ -753,7 +759,7 @@ function renderOnline(v){
   }
   // messages
   let msg="";
-  if(v.phase==="lobby") msg="<p>部屋コードを友達に教えてください。ホストが開始すると役職が配られます。役職構成は人数で自動決定されます。ハウスルール：初日の夜は襲撃なし・騎士の護衛もなし。</p>";
+  if(v.phase==="lobby") msg="<p>部屋コードを友達に教えてください。ホストが開始すると役職が配られます。役職構成は人数で自動決定されます。ハウスルール：初日の夜は占いだけです。</p>";
   if(v.phase==="night") msg="<p>夜です。"+(v.action?"あなたの行動を選んでください。":(v.waitInfo||"他の人の行動を待っています…"))+"</p>";
   if(v.phase==="morning") msg="<p style='font-size:17px'>"+v.morningMsg+"</p><p class='muted'>ホストが次へ進めると議論が始まります。</p>";
   if(v.phase==="discussion") msg="<p>議論してください。チャット機能はないので、通話や対面で話してください。ホストが投票に進めます。</p>";
@@ -773,6 +779,11 @@ function renderOnline(v){
       box.appendChild(b);
     });
     const h=document.createElement("h3"); h.textContent=v.action.title; box.prepend(h);
+  }
+  if(v.action&&v.action.type==="knight"){
+    const sk=document.createElement("button"); sk.className="sub"; sk.textContent="今晩は誰も守らない";
+    sk.onclick=async()=>{ try{ const nv=await post("/api/night",{room:v.room,pid:O.pid,token:O.token,target:-1}); renderOnline(nv); }catch(e){ alert(e.message); refreshOnline(); } };
+    box.appendChild(sk);
   }
   if(v.action&&v.action.type==="nekomata"){
     const sk=document.createElement("button"); sk.className="sub"; sk.textContent="今晩は蘇生しない（能力は残る）";
