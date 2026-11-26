@@ -60,9 +60,10 @@ export class RoomDO {
     const seer = d.players.find(p=>p.alive&&p.role==="seer");
     const seerDone = !seer || n.seerActed;
     const knight = d.players.find(p=>p.alive&&p.role==="knight");
-    const knightDone = !knight || d.day===1 || n.knightActed; // 初日守りなし：初日の夜は騎士は護衛できない
+    const knightLegal = knight ? d.players.filter(p=>p.alive && p.id!==knight.id && p.id!==d.lastGuard).length : 0;
+    const knightDone = !knight || d.day===1 || n.knightActed || knightLegal===0; // 初日守りなし＋守れる相手がいない場合は自動で完了（詰み防止）
     const neko = d.players.find(p=>p.alive&&p.role==="nekomata"&&!p.nekoUsed);
-    const nekoDone = !neko || !d.players.some(p=>!p.alive) || n.nekoActed;
+    const nekoDone = d.day===1 || !neko || !d.players.some(p=>!p.alive) || n.nekoActed; // 初日の夜は占いだけ
     return wolfDone && seerDone && knightDone && nekoDone;
   }
   async resolveNight(){
@@ -241,6 +242,14 @@ export class RoomDO {
       const d=this.data;
       if(d.phase!=="night" || !me.alive) return json({error:"今は夜の行動はできません"},400);
       const target=Number(body.target); const tp=d.players[target];
+      if(d.day===1 && me.role!=="seer") return json({error:"初日の夜は占いだけです"},400);
+      if(me.role==="knight" && target===-1){
+        if(d.night.knightActed) return json({error:"行動済みです"},400);
+        d.night.knightActed=true; d.night.guard=null; // 護衛しない
+        if(this.nightComplete()) await this.resolveNight();
+        await this.save();
+        return json(this.view(me));
+      }
       if(me.role==="nekomata" && target===-1){
         if(d.night.nekoActed) return json({error:"行動済みです"},400);
         d.night.nekoActed=true; // 蘇生しない（能力は温存）
@@ -279,15 +288,7 @@ export class RoomDO {
       if(d.phase!=="voting" || !me.alive) return json({error:"今は投票できません"},400);
       if(d.votes[me.id]!==undefined) return json({error:"投票済みです"},400);
       const target=Number(body.target); const tp=d.players[target];
-      if(me.role==="nekomata" && target===-1){
-        if(d.night.nekoActed) return json({error:"行動済みです"},400);
-        d.night.nekoActed=true; // 蘇生しない（能力は温存）
-        if(this.nightComplete()) await this.resolveNight();
-        await this.save();
-        return json(this.view(me));
-      }
-      if(!tp || tp.id===me.id) return json({error:"対象が不正です"},400);
-      if(me.role!=="nekomata" && !tp.alive) return json({error:"対象が不正です"},400);
+      if(!tp || !tp.alive || tp.id===me.id) return json({error:"対象が不正です"},400);
       d.votes[me.id]=target;
       if(Object.keys(d.votes).length>=this.alive().length) this.resolveVote();
       await this.save();
