@@ -84,7 +84,7 @@ td,th{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left}
   <div class="card">
     <h2>③ オプション</h2>
     <p class="muted">ハウスルール：初日の夜は占いだけ（ランダム白）です（襲撃なし・護衛なし）。</p>
-    <p class="muted">初日の占いは「ランダム白」：占い師は自分で選べず、GMが人狼以外の1人をランダムに選んで「人狼ではない」と伝えます。</p>
+    <p class="muted">初日の占いは「ランダム白」：占い師は自分で選べず、GMが人狼以外の1人をランダムに選んで結果を自動で伝えます。</p>
     <label style="display:block;line-height:2">昼の議論タイマー：<select id="optTimer"><option value="0">なし</option><option value="180">3分</option><option value="300" selected>5分</option><option value="600">10分</option></select></label>
   </div>
   <button id="btnStart">役職を配ってゲーム開始</button>
@@ -772,13 +772,7 @@ function renderOnline(v){
   $("ogMsg").innerHTML=msg;
   // actions
   const box=$("ogActions"); box.innerHTML="";
-  if(v.action&&v.action.type==="seerFirst"){
-    const b=document.createElement("button"); b.textContent="🔮 ランダム白の結果を見る";
-    b.onclick=async()=>{ try{ const nv=await post("/api/night",{room:v.room,pid:O.pid,token:O.token,target:-2}); renderOnline(nv); }catch(e){ alert(e.message); refreshOnline(); } };
-    box.appendChild(b);
-    const hd=document.createElement("h3"); hd.textContent=v.action.title; box.prepend(hd);
-  }
-  else if(v.action){
+  if(v.action){
     v.action.targets.forEach(t=>{
       const b=document.createElement("button"); b.className="pick"; b.textContent=t.name;
       b.onclick=async()=>{ box.querySelectorAll("button").forEach(x=>x.disabled=true);
