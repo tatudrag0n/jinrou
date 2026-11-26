@@ -83,8 +83,8 @@ td,th{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left}
   </div>
   <div class="card">
     <h2>③ オプション</h2>
-    <p class="muted">ハウスルール：初日の夜は占いだけです（襲撃なし・護衛なし）。</p>
-    <label style="display:block;line-height:2"><input type="checkbox" id="optSeerFirstRandom"> 初日の夜の占いは「ランダム占い」（占い師が選ばずGMがランダムに1人を占う ※人狼は出ません）</label>
+    <p class="muted">ハウスルール：初日の夜は占いだけ（ランダム白）です（襲撃なし・護衛なし）。</p>
+    <p class="muted">初日の占いは「ランダム白」：占い師は自分で選べず、GMが人狼以外の1人をランダムに選んで「人狼ではない」と伝えます。</p>
     <label style="display:block;line-height:2">昼の議論タイマー：<select id="optTimer"><option value="0">なし</option><option value="180">3分</option><option value="300" selected>5分</option><option value="600">10分</option></select></label>
   </div>
   <button id="btnStart">役職を配ってゲーム開始</button>
@@ -99,7 +99,7 @@ td,th{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left}
     <h2>📖 遊び方（簡単な説明）</h2>
     <p>村人の中にまぎれた<b>人狼</b>を、話し合いで見つけて投票で処刑するゲームです。</p>
     <h3 style="margin-top:14px">ゲームの流れ</h3>
-    <p>🌙 <b>夜</b>：人狼の襲撃、占いなど、役職の行動をします（初日の夜は占いだけ）<br>
+    <p>🌙 <b>夜</b>：人狼の襲撃、占いなど、役職の行動をします（初日の夜は占いだけ、しかもランダム白）<br>
     ☀️ <b>朝</b>：昨晩死んだ人が発表されます<br>
     🗣️ <b>昼</b>：全員で「誰が人狼か」を話し合います（チャット機能はないので、対面や通話で）<br>
     🗳️ <b>投票</b>：1人ずつ投票し、いちばん票を集めた人が処刑されます（同票なら処刑なし）<br>
@@ -110,7 +110,7 @@ td,th{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left}
     ・<b>妖狐陣営</b>：どちらの決着でも、妖狐が最後まで生きていれば妖狐の勝ち<br>
     ・<b>てるてる坊主</b>：投票で処刑されると勝ち</p>
     <h3 style="margin-top:14px">このゲームのルール</h3>
-    <p>・初日の夜は占いだけです（襲撃も護衛もありません）<br>・2日目の夜からは襲撃・護衛など全部の行動があります</p>
+    <p>・初日の夜は占いだけです（襲撃も護衛もありません）。しかも占い師は自分で選べず、GMが人狼以外の1人をランダムに選ぶ「ランダム白」です<br>・2日目の夜からは襲撃・護衛など全部の行動があります</p>
   </div>
   <div class="card">
     <h2>役職の簡単な説明</h2>
@@ -404,7 +404,7 @@ $("btnStart").onclick=()=>{
   const total=ROLE_ORDER.reduce((a,k)=>a+roleCfg[k],0);
   if(total!==n) return;
   S=newState();
-  S.options={ firstNightGuard:false, seerFirstRandom:$("optSeerFirstRandom").checked, timer:parseInt($("optTimer").value,10) };
+  S.options={ firstNightGuard:false, seerFirstRandom:true, timer:parseInt($("optTimer").value,10) };
   const names=[];
   for(let i=0;i<n;i++){ const v=($("name-"+i).value||"").trim(); names.push(v||("プレイヤー"+(i+1))); }
   if(new Set(names).size!==names.length){ alert("名前が重複しています。名前を変えてください。"); return; }
@@ -759,7 +759,7 @@ function renderOnline(v){
   }
   // messages
   let msg="";
-  if(v.phase==="lobby") msg="<p>部屋コードを友達に教えてください。ホストが開始すると役職が配られます。役職構成は人数で自動決定されます。ハウスルール：初日の夜は占いだけです。</p>";
+  if(v.phase==="lobby") msg="<p>部屋コードを友達に教えてください。ホストが開始すると役職が配られます。役職構成は人数で自動決定されます。ハウスルール：初日の夜は占いだけ（ランダム白）です。</p>";
   if(v.phase==="night") msg="<p>夜です。"+(v.action?"あなたの行動を選んでください。":(v.waitInfo||"他の人の行動を待っています…"))+"</p>";
   if(v.phase==="morning") msg="<p style='font-size:17px'>"+v.morningMsg+"</p><p class='muted'>ホストが次へ進めると議論が始まります。</p>";
   if(v.phase==="discussion") msg="<p>議論してください。チャット機能はないので、通話や対面で話してください。ホストが投票に進めます。</p>";
@@ -770,7 +770,13 @@ function renderOnline(v){
   $("ogMsg").innerHTML=msg;
   // actions
   const box=$("ogActions"); box.innerHTML="";
-  if(v.action){
+  if(v.action&&v.action.type==="seerFirst"){
+    const b=document.createElement("button"); b.textContent="🔮 ランダム白の結果を見る";
+    b.onclick=async()=>{ try{ const nv=await post("/api/night",{room:v.room,pid:O.pid,token:O.token,target:-2}); renderOnline(nv); }catch(e){ alert(e.message); refreshOnline(); } };
+    box.appendChild(b);
+    const hd=document.createElement("h3"); hd.textContent=v.action.title; box.prepend(hd);
+  }
+  else if(v.action){
     v.action.targets.forEach(t=>{
       const b=document.createElement("button"); b.className="pick"; b.textContent=t.name;
       b.onclick=async()=>{ box.querySelectorAll("button").forEach(x=>x.disabled=true);
