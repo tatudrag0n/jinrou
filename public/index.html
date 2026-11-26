@@ -83,7 +83,7 @@ td,th{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left}
   </div>
   <div class="card">
     <h2>③ オプション</h2>
-    <p class="muted">ハウスルール：初日の夜は人狼の襲撃はありません（初日襲いなし）。騎士の役職はありません。</p>
+    <p class="muted">ハウスルール：初日の夜は人狼の襲撃がなく、騎士も護衛できません（初日襲いなし・初日守りなし）。</p>
     <label style="display:block;line-height:2"><input type="checkbox" id="optSeerFirstRandom"> 初日の夜の占いは「ランダム占い」（占い師が選ばずGMがランダムに1人を占う ※人狼は出ません）</label>
     <label style="display:block;line-height:2">昼の議論タイマー：<select id="optTimer"><option value="0">なし</option><option value="180">3分</option><option value="300" selected>5分</option><option value="600">10分</option></select></label>
   </div>
@@ -110,7 +110,7 @@ td,th{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left}
     ・<b>妖狐陣営</b>：どちらの決着でも、妖狐が最後まで生きていれば妖狐の勝ち<br>
     ・<b>てるてる坊主</b>：投票で処刑されると勝ち</p>
     <h3 style="margin-top:14px">このゲームのルール</h3>
-    <p>・初日の夜は人狼の襲撃がありません<br>・騎士の役職はありません</p>
+    <p>・初日の夜は人狼の襲撃がありません<br>・初日の夜は騎士も護衛できません（2日目からはできます）</p>
   </div>
   <div class="card">
     <h2>役職の簡単な説明</h2>
@@ -119,6 +119,7 @@ td,th{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left}
       <tr><td>🧑‍🌾 <b>村人</b></td><td>能力はありません。話し合いで人狼を探します。</td></tr>
       <tr><td>🔮 <b>占い師</b></td><td>夜に1人を占い、その人が人狼かどうか分かります。</td></tr>
       <tr><td>👻 <b>霊媒師</b></td><td>処刑された人が人狼だったかどうか分かります。</td></tr>
+      <tr><td>🛡️ <b>騎士</b></td><td>夜に1人を守り、その人が襲われても死にません。自分は守れず、同じ人は2晩連続で守れません。初日の夜は守れません。</td></tr>
       <tr><td>🐱 <b>猫又</b></td><td>ゲーム中1回だけ、死んだ人を生き返らせられます。</td></tr>
       <tr><td>🃏 <b>狂人</b></td><td>人狼陣営の人間。人狼を勝たせると勝ち。占いでは「人狼ではない」と出ます。</td></tr>
       <tr><td>👁️ <b>狂信者</b></td><td>人狼陣営。人狼が誰か分かります（人狼からは分かりません）。</td></tr>
@@ -287,7 +288,7 @@ const ROLE_ORDER = ["wolf","seer","knight","medium","madman","fanatic","fox","ha
 function defaultRoles(n){
   // n: 4..15
   const wolves = n>=13?3:(n>=7?2:1);
-  const cfg = {wolf:wolves, seer:1, knight:0, medium:n>=9?1:0, madman:n>=7?1:0, fox:0, haitoku:0, fanatic:0, nekomata:0, teruteru:0, villager:0};
+  const cfg = {wolf:wolves, seer:1, knight:n>=6?1:0, medium:n>=9?1:0, madman:n>=7?1:0, fox:0, haitoku:0, fanatic:0, nekomata:0, teruteru:0, villager:0};
   let used = cfg.wolf+cfg.seer+cfg.knight+cfg.medium+cfg.madman;
   cfg.villager = n-used;
   return cfg;
@@ -334,7 +335,7 @@ function buildNames(){
 function buildRoleConfig(){
   const n = parseInt(pcSel.value,10);
   const box = $("roleConfig"); box.innerHTML="";
-  ROLE_ORDER.filter(k=>k!=="knight").forEach(key=>{
+  ROLE_ORDER.forEach(key=>{
     const r=ROLES[key];
     const row=document.createElement("div"); row.className="stepper";
     row.innerHTML = "<div>"+r.icon+" <b>"+r.name+"</b> <span class='muted'>"+r.teamLabel+"</span></div>";
@@ -703,8 +704,8 @@ function stopTimer(){ if(S&&S.timerId){ clearInterval(S.timerId); S.timerId=null
 
 // ===== Online mode (no chat) =====
 const ROLE_ICONS={wolf:"🐺",madman:"🃏",seer:"🔮",knight:"🛡️",medium:"👻",villager:"🧑‍🌾",fox:"🦊",haitoku:"😈",fanatic:"👁️",nekomata:"🐱",teruteru:"🌤️"};
-const ROLE_NAMES={wolf:"人狼",seer:"占い師",medium:"霊媒師",madman:"狂人",fanatic:"狂信者",fox:"妖狐",haitoku:"背徳者",nekomata:"猫又",teruteru:"てるてる坊主",villager:"村人"};
-const ONLINE_ROLE_KEYS=["wolf","seer","medium","madman","fanatic","fox","haitoku","nekomata","teruteru","villager"];
+const ROLE_NAMES={wolf:"人狼",seer:"占い師",knight:"騎士",medium:"霊媒師",madman:"狂人",fanatic:"狂信者",fox:"妖狐",haitoku:"背徳者",nekomata:"猫又",teruteru:"てるてる坊主",villager:"村人"};
+const ONLINE_ROLE_KEYS=["wolf","seer","knight","medium","madman","fanatic","fox","haitoku","nekomata","teruteru","villager"];
 let O=null, oTimer=null;
 let helpReturn="scr-setup";
 function openHelp(from){ helpReturn=from; show("scr-help"); }
@@ -752,7 +753,7 @@ function renderOnline(v){
   }
   // messages
   let msg="";
-  if(v.phase==="lobby") msg="<p>部屋コードを友達に教えてください。ホストが開始すると役職が配られます。役職構成は人数で自動決定されます。ハウスルール：初日の夜は襲撃なし、騎士はいません。</p>";
+  if(v.phase==="lobby") msg="<p>部屋コードを友達に教えてください。ホストが開始すると役職が配られます。役職構成は人数で自動決定されます。ハウスルール：初日の夜は襲撃なし・騎士の護衛もなし。</p>";
   if(v.phase==="night") msg="<p>夜です。"+(v.action?"あなたの行動を選んでください。":(v.waitInfo||"他の人の行動を待っています…"))+"</p>";
   if(v.phase==="morning") msg="<p style='font-size:17px'>"+v.morningMsg+"</p><p class='muted'>ホストが次へ進めると議論が始まります。</p>";
   if(v.phase==="discussion") msg="<p>議論してください。チャット機能はないので、通話や対面で話してください。ホストが投票に進めます。</p>";
