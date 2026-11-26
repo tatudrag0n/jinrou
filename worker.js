@@ -8,7 +8,7 @@ const ROLE_DEFS = {
 };
 function defaultRoles(n){
   const wolves = n>=13?3:(n>=7?2:1);
-  const cfg = {wolf:wolves, seer:1, knight:n>=6?1:0, medium:n>=9?1:0, madman:n>=7?1:0, villager:0};
+  const cfg = {wolf:wolves, seer:1, knight:0, medium:n>=9?1:0, madman:n>=7?1:0, villager:0}; // 騎士なし（本人指定ルール）
   cfg.villager = n - (cfg.wolf+cfg.seer+cfg.knight+cfg.medium+cfg.madman);
   return cfg;
 }
@@ -40,7 +40,7 @@ export class RoomDO {
   }
   nightComplete(){
     const d=this.data, n=d.night;
-    const wolfDone = n.kill!==null;
+    const wolfDone = d.day===1 ? true : n.kill!==null; // 初日襲撃なし
     const seer = d.players.find(p=>p.alive&&p.role==="seer");
     const seerDone = !seer || n.seerActed;
     const knight = d.players.find(p=>p.alive&&p.role==="knight");
@@ -102,7 +102,8 @@ export class RoomDO {
       const n=d.night;
       if(d.phase==="night"){
         if(me.role==="wolf"){
-          if(n.kill===null) v.action={type:"wolf", title:"🐺 襲撃する人を選んでください", targets:this.nonWolves().map(p=>({id:p.id,name:p.name}))};
+          if(d.day===1){ v.acted=true; v.waitInfo="初日は襲撃できません（初日襲いなしルール）"; }
+          else if(n.kill===null) v.action={type:"wolf", title:"🐺 襲撃する人を選んでください", targets:this.nonWolves().map(p=>({id:p.id,name:p.name}))};
           else { v.acted=true; v.waitInfo="今晩の襲撃先は "+d.players[n.kill].name+" です"; }
         } else if(me.role==="seer"){
           if(!n.seerActed) v.action={type:"seer", title:"🔮 占う人を選んでください", targets:this.alive().filter(p=>p.id!==me.id).map(p=>({id:p.id,name:p.name}))};
@@ -181,6 +182,7 @@ export class RoomDO {
       const target=Number(body.target); const tp=d.players[target];
       if(!tp || !tp.alive || tp.id===me.id) return json({error:"対象が不正です"},400);
       if(me.role==="wolf"){
+        if(d.day===1) return json({error:"初日は襲撃できません"},400);
         if(d.night.kill!==null) return json({error:"襲撃先は決定済みです"},400);
         if(tp.role==="wolf") return json({error:"人狼は襲撃できません"},400);
         d.night.kill=target;
