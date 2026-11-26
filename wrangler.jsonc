@@ -1,1 +1,1 @@
-{"assets":{"directory":"."},"compatibility_date":"2025-09-01","name":"jinrou","routes":[{"custom_domain":true,"pattern":"jinrou.mct-official.com"}],"workers_dev":true}
+{"assets":{"binding":"ASSETS","directory":"./public"},"compatibility_date":"2025-09-01","durable_objects":{"bindings":[{"class_name":"RoomDO","name":"ROOMS"}]},"main":"worker.js","migrations":[{"new_sqlite_classes":["RoomDO"],"tag":"v1"}],"name":"jinrou","routes":[{"custom_domain":true,"pattern":"jinrou.mct-official.com"}],"workers_dev":true}
