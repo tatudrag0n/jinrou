@@ -8,10 +8,10 @@ const ROLE_DEFS = {
   fox:{name:"妖狐"}, haitoku:{name:"背徳者"}, fanatic:{name:"狂信者"},
   nekomata:{name:"猫又"}, teruteru:{name:"てるてる坊主"}
 };
-const ROLE_KEYS = ["wolf","seer","medium","madman","fanatic","fox","haitoku","nekomata","teruteru","villager"];
+const ROLE_KEYS = ["wolf","seer","knight","medium","madman","fanatic","fox","haitoku","nekomata","teruteru","villager"];
 function defaultRoles(n){
   const wolves = n>=13?3:(n>=7?2:1);
-  const cfg = {wolf:wolves, seer:1, knight:0, medium:n>=9?1:0, madman:n>=7?1:0, fox:0, haitoku:0, fanatic:0, nekomata:0, teruteru:0, villager:0}; // 騎士なし（本人指定ルール）
+  const cfg = {wolf:wolves, seer:1, knight:n>=6?1:0, medium:n>=9?1:0, madman:n>=7?1:0, fox:0, haitoku:0, fanatic:0, nekomata:0, teruteru:0, villager:0};
   cfg.villager = n - (cfg.wolf+cfg.seer+cfg.knight+cfg.medium+cfg.madman);
   return cfg;
 }
@@ -60,7 +60,7 @@ export class RoomDO {
     const seer = d.players.find(p=>p.alive&&p.role==="seer");
     const seerDone = !seer || n.seerActed;
     const knight = d.players.find(p=>p.alive&&p.role==="knight");
-    const knightDone = !knight || n.knightActed; // online: knight can guard from night 1
+    const knightDone = !knight || d.day===1 || n.knightActed; // 初日守りなし：初日の夜は騎士は護衛できない
     const neko = d.players.find(p=>p.alive&&p.role==="nekomata"&&!p.nekoUsed);
     const nekoDone = !neko || !d.players.some(p=>!p.alive) || n.nekoActed;
     return wolfDone && seerDone && knightDone && nekoDone;
@@ -153,7 +153,8 @@ export class RoomDO {
           if(!n.seerActed) v.action={type:"seer", title:"🔮 占う人を選んでください", targets:this.alive().filter(p=>p.id!==me.id).map(p=>({id:p.id,name:p.name}))};
           else v.acted=true;
         } else if(me.role==="knight"){
-          if(!n.knightActed) v.action={type:"knight", title:"🛡️ 護衛する人を選んでください", targets:this.alive().filter(p=>p.id!==me.id && p.id!==d.lastGuard).map(p=>({id:p.id,name:p.name}))};
+          if(d.day===1){ v.acted=true; v.waitInfo="初日は護衛できません（初日守りなしルール）"; }
+          else if(!n.knightActed) v.action={type:"knight", title:"🛡️ 護衛する人を選んでください", targets:this.alive().filter(p=>p.id!==me.id && p.id!==d.lastGuard).map(p=>({id:p.id,name:p.name}))};
           else v.acted=true;
         } else if(me.role==="nekomata"){
           const dead=d.players.filter(p=>!p.alive);
@@ -264,6 +265,7 @@ export class RoomDO {
         if(tp.alive) return json({error:"死んだ人だけ蘇生できます"},400);
         d.night.nekoActed=true; d.night.revive=target; me.nekoUsed=true;
       } else if(me.role==="knight"){
+        if(d.day===1) return json({error:"初日は護衛できません"},400);
         if(d.night.knightActed) return json({error:"護衛済みです"},400);
         if(d.lastGuard===target) return json({error:"同じ人を2晩連続では護衛できません"},400);
         d.night.knightActed=true; d.night.guard=target;
