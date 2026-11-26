@@ -54,6 +54,14 @@ export class RoomDO {
     }
     return false;
   }
+  pickFirstWhite(){
+    const d=this.data;
+    const seer=d.players.find(p=>p.alive&&p.role==="seer");
+    if(!seer) return null;
+    const cand=d.players.filter(p=>p.alive && p.id!==seer.id && p.role!=="wolf");
+    if(!cand.length) return null;
+    return cand[Math.floor(Math.random()*cand.length)].id;
+  }
   nightComplete(){
     const d=this.data, n=d.night;
     const wolfDone = d.day===1 ? true : n.kill!==null; // 初日襲撃なし
@@ -151,7 +159,11 @@ export class RoomDO {
           else if(n.kill===null) v.action={type:"wolf", title:"🐺 襲撃する人を選んでください", targets:this.nonWolves().map(p=>({id:p.id,name:p.name}))};
           else { v.acted=true; v.waitInfo="今晩の襲撃先は "+d.players[n.kill].name+" です"; }
         } else if(me.role==="seer"){
-          if(!n.seerActed) v.action={type:"seer", title:"🔮 占う人を選んでください", targets:this.alive().filter(p=>p.id!==me.id).map(p=>({id:p.id,name:p.name}))};
+          if(d.day===1){
+            if(!n.seerActed) v.action={type:"seerFirst", title:"🔮 初日の占いはランダム白です（ボタンを押すと結果が出ます）", targets:[]};
+            else v.acted=true;
+          }
+          else if(!n.seerActed) v.action={type:"seer", title:"🔮 占う人を選んでください", targets:this.alive().filter(p=>p.id!==me.id).map(p=>({id:p.id,name:p.name}))};
           else v.acted=true;
         } else if(me.role==="knight"){
           if(d.day===1){ v.acted=true; v.waitInfo="初日は護衛できません（初日守りなしルール）"; }
@@ -233,7 +245,8 @@ export class RoomDO {
       shuffle(deck);
       this.data.players.forEach((p,i)=>{ p.role=deck[i]; p.alive=true; });
       this.data.day=1; this.data.phase="night";
-      this.data.night={kill:null, guard:null, seerActed:false, knightActed:false, nekoActed:false, revive:null, curseFox:null};
+      this.data.night={kill:null, guard:null, seerActed:false, knightActed:false, nekoActed:false, revive:null, curseFox:null, firstWhite:null};
+      this.data.night.firstWhite=this.pickFirstWhite();
       this.data.publicLog.push("ゲーム開始："+n+"人（"+ROLE_KEYS.filter(k=>cfg[k]).map(k=>ROLE_DEFS[k].name+"×"+cfg[k]).join(" ")+"）");
       await this.save();
       return json(this.view(me));
@@ -243,6 +256,18 @@ export class RoomDO {
       if(d.phase!=="night" || !me.alive) return json({error:"今は夜の行動はできません"},400);
       const target=Number(body.target); const tp=d.players[target];
       if(d.day===1 && me.role!=="seer") return json({error:"初日の夜は占いだけです"},400);
+      if(me.role==="seer" && d.day===1){
+        if(target!==-2) return json({error:"初日の占いはランダム白です"},400);
+        if(d.night.seerActed) return json({error:"占い済みです"},400);
+        const fw=d.players[d.night.firstWhite];
+        if(!fw) return json({error:"ランダム白の対象がいません"},400);
+        d.night.seerActed=true;
+        d.seerResults[me.id]={targetName:fw.name, isWolf:false, day:1};
+        if(fw.role==="fox") d.night.curseFox=fw.id;
+        if(this.nightComplete()) await this.resolveNight();
+        await this.save();
+        return json(this.view(me));
+      }
       if(me.role==="knight" && target===-1){
         if(d.night.knightActed) return json({error:"行動済みです"},400);
         d.night.knightActed=true; d.night.guard=null; // 護衛しない
