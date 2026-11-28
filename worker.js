@@ -10,7 +10,7 @@ const ROLE_DEFS = {
 };
 const ROLE_KEYS = ["wolf","seer","knight","medium","madman","fanatic","fox","haitoku","nekomata","teruteru","villager"];
 function defaultRoles(n){
-  const wolves = n>=13?3:(n>=7?2:1);
+  const wolves = n>=26?6:(n>=21?5:(n>=16?4:(n>=13?3:(n>=7?2:1))));
   const cfg = {wolf:wolves, seer:1, knight:n>=6?1:0, medium:n>=9?1:0, madman:n>=7?1:0, fox:0, haitoku:0, fanatic:0, nekomata:0, teruteru:0, villager:0};
   cfg.villager = n - (cfg.wolf+cfg.seer+cfg.knight+cfg.medium+cfg.madman);
   return cfg;
@@ -204,7 +204,7 @@ export class RoomDO {
       const name=String(body.name||"").trim().slice(0,12);
       if(!name) return json({error:"名前を入れてください"},400);
       if(this.data.players.some(p=>p.name===name)) return json({error:"同じ名前の人がいます"},400);
-      if(this.data.players.length>=15) return json({error:"部屋が満員です"},400);
+      if(this.data.players.length>=30) return json({error:"部屋が満員です（最大30人）"},400);
       const pid=Math.max(...this.data.players.map(p=>p.id))+1;
       const tk=token();
       this.data.players.push({id:pid,name,token:tk,role:null,alive:true});
@@ -224,7 +224,7 @@ export class RoomDO {
       if(me.id!==this.data.hostId) return json({error:"ホストだけが役職を変更できます"},403);
       if(this.data.phase!=="lobby") return json({error:"開始後は変更できません"},400);
       const cfg={};
-      ROLE_KEYS.forEach(k=>{ const v=Math.max(0,Math.min(15,parseInt(body.cfg&&body.cfg[k],10)||0)); cfg[k]=v; });
+      ROLE_KEYS.forEach(k=>{ const v=Math.max(0,Math.min(30,parseInt(body.cfg&&body.cfg[k],10)||0)); cfg[k]=v; });
       this.data.roleCfg=cfg;
       await this.save();
       return json(this.view(me));
