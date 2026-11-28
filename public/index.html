@@ -126,6 +126,11 @@ td,th{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left}
       <tr><td>🦊 <b>妖狐</b></td><td>襲われても死にませんが、占われると死にます。最後まで生き残れば勝ちです。</td></tr>
       <tr><td>😈 <b>背徳者</b></td><td>妖狐の味方。妖狐が誰か分かり、妖狐が死ぬと一緒に死にます。</td></tr>
       <tr><td>🌤️ <b>てるてる坊主</b></td><td>処刑されると勝ちです。襲われて死ぬと負けです。</td></tr>
+      <tr><td>🏹 <b>ハンター</b></td><td>襲撃・処刑・独裁で死んだとき、正体を明かして1人を道連れにできます。</td></tr>
+      <tr><td>👥 <b>共有者</b></td><td>共有者同士はお互いが誰か分かっています（2人以上で入れます）。</td></tr>
+      <tr><td>👑 <b>独裁者</b></td><td>1回だけ、議論の終わりに正体を明かして議論を終わらせ、1人を追放できます（その日は投票なし）。</td></tr>
+      <tr><td>🌟 <b>神様</b></td><td>全員の役職を知っています。最後まで生き残れば単独勝利です。</td></tr>
+      <tr><td>💘 <b>恋人</b></td><td>2人ペア。お互いが分かり、2人とも最後まで生き残れば勝利。片方が死ぬともう片方も死にます（ちょうど2人で入れます）。</td></tr>
     </table>
     <p class="muted" style="margin-top:8px">占い・霊媒では、人狼以外は全員「人狼ではない」と出ます。</p>
     <button id="btnHelpBack">戻る</button>
@@ -289,13 +294,18 @@ const ROLES = {
   haitoku:{name:"背徳者", icon:"😈", team:"fox", teamLabel:"妖狐陣営", color:"#e8933e", desc:"妖狐陣営。妖狐が誰か分かります。妖狐が死ぬと、あなたも道連れで死にます。妖狐が生き残ってゲームが終われば勝利です。占いでは「人狼ではない」と出ます。"},
   fanatic:{name:"狂信者", icon:"👁️", team:"wolf", teamLabel:"人狼陣営", color:"var(--purple)", desc:"人狼陣営。人狼が誰か分かります（人狼側からはあなたが狂信者だと分かりません）。占いでは「人狼ではない」と出ます。"},
   nekomata:{name:"猫又", icon:"🐱", team:"village", teamLabel:"村人陣営", color:"var(--green)", desc:"村人陣営。ゲーム中1回だけ、夜に死んだ人1人を蘇生できます。蘇生は朝に全員へ発表されます。"},
-  teruteru:{name:"てるてる坊主", icon:"🌤️", team:"teruteru", teamLabel:"単独（処刑されたら勝利）", color:"#e8d33e", desc:"昼の投票で処刑されると、あなたの単独勝利でゲームが終わります。人狼に襲撃されて死ぬと負けです。占いでは「人狼ではない」と出ます。"}
+  teruteru:{name:"てるてる坊主", icon:"🌤️", team:"teruteru", teamLabel:"単独（処刑されたら勝利）", color:"#e8d33e", desc:"昼の投票で処刑されると、あなたの単独勝利でゲームが終わります。人狼に襲撃されて死ぬと負けです。占いでは「人狼ではない」と出ます。"},
+  hunter:{name:"ハンター", icon:"🏹", team:"village", teamLabel:"村人陣営", color:"var(--green)", desc:"追放（処刑・独裁）もしくは襲撃をされて死んだとき、正体を明かして、だれか1人を道連れにできます。"},
+  twins:{name:"共有者", icon:"👥", team:"village", teamLabel:"村人陣営", color:"var(--blue)", desc:"共有者同士は、お互いが誰か最初から分かっています。2人で協力しましょう。能力はそれだけです。"},
+  dictator:{name:"独裁者", icon:"👑", team:"village", teamLabel:"村人陣営", color:"var(--accent)", desc:"ゲーム中1回だけ、昼の議論の終わりに正体を明かして議論を強制終了させ、独断で1人を追放できます（その日は投票なし）。"},
+  god:{name:"神様", icon:"🌟", team:"god", teamLabel:"単独（最後まで生き残れば勝利）", color:"#e8d33e", desc:"だれがどの役職なのか、すべて知っています。ゲーム終了まで生き残れば単独勝利です。占いでは「人狼ではない」と出ます。"},
+  lover:{name:"恋人", icon:"💘", team:"lover", teamLabel:"恋人ペア（2人で生き残れば勝利）", color:"#e86a92", desc:"恋人同士はお互いが分かります。2人ともゲーム終了まで生き残ればペアで単独勝利です。片方が死ぬと、もう片方も道連れで死にます。占いでは「人狼ではない」と出ます。"}
 };
-const ROLE_ORDER = ["wolf","seer","knight","medium","madman","fanatic","fox","haitoku","nekomata","teruteru","villager"];
+const ROLE_ORDER = ["wolf","seer","knight","medium","madman","fanatic","fox","haitoku","nekomata","teruteru","hunter","twins","dictator","god","lover","villager"];
 function defaultRoles(n){
   // n: 4..30
   const wolves = n>=26?6:(n>=21?5:(n>=16?4:(n>=13?3:(n>=7?2:1))));
-  const cfg = {wolf:wolves, seer:1, knight:n>=6?1:0, medium:n>=9?1:0, madman:n>=7?1:0, fox:0, haitoku:0, fanatic:0, nekomata:0, teruteru:0, villager:0};
+  const cfg = {wolf:wolves, seer:1, knight:n>=6?1:0, medium:n>=9?1:0, madman:n>=7?1:0, fox:0, haitoku:0, fanatic:0, nekomata:0, teruteru:0, hunter:0, twins:0, dictator:0, god:0, lover:0, villager:0};
   let used = cfg.wolf+cfg.seer+cfg.knight+cfg.medium+cfg.madman;
   cfg.villager = n-used;
   return cfg;
@@ -365,8 +375,10 @@ function updateRoleTotal(){
   if(total!==n) warn="合計が人数と一致していません。";
   else if(roleCfg.wolf<1) warn="人狼が0人です。";
   else if(roleCfg.wolf*2>=n) warn="人狼が多すぎます（開始直後に人狼陣営が勝ってしまいます）。";
+  else if(roleCfg.twins===1) warn="共有者は2人以上必要です。";
+  else if(roleCfg.lover===1||roleCfg.lover>2) warn="恋人はちょうど2人必要です。";
   $("roleWarn").textContent=warn;
-  $("btnStart").disabled = (total!==n || roleCfg.wolf<1);
+  $("btnStart").disabled = (total!==n || roleCfg.wolf<1 || roleCfg.twins===1 || roleCfg.lover===1 || roleCfg.lover>2);
 }
 pcSel.onchange=buildNames;
 $("btnNames").onclick=buildNames;
@@ -444,6 +456,17 @@ function revealRoles(idx){
     if(p.role==="haitoku"){
       const fx=S.players.find(x=>x.role==="fox");
       extra = fx? "妖狐は："+fx.name : "この村に妖狐はいません（妖狐がいないと背徳者は勝てません）";
+    }
+    if(p.role==="twins"){
+      const ms=S.players.filter(x=>x.role==="twins"&&x.id!==p.id).map(x=>x.name);
+      extra = "仲間の共有者："+ms.join("、");
+    }
+    if(p.role==="lover"){
+      const lv=S.players.find(x=>x.role==="lover"&&x.id!==p.id);
+      extra = lv? "あなたの恋人："+lv.name : "";
+    }
+    if(p.role==="god"){
+      extra = "全員の役職："+S.players.filter(x=>x.id!==p.id).map(x=>x.name+"＝"+ROLES[x.role].name).join("、");
     }
     $("roleExtra").innerHTML = extra? "<span class='chip'>"+extra+"</span>":"";
     $("btnRoleDone").onclick=()=>revealRoles(idx+1);
@@ -564,6 +587,38 @@ function showSeerResult(t,isWolf,done){
   $("roleExtra").innerHTML="";
   $("btnRoleDone").onclick=done;
 }
+function loverChainDie(deaths){
+  let added=true;
+  while(added){
+    added=false;
+    for(const p of [...deaths]){
+      if(p.role==="lover"){
+        const partner=S.players.find(x=>x.role==="lover"&&x.id!==p.id);
+        if(partner && partner.alive){ partner.alive=false; deaths.push(partner); added=true; log(S.day+"日目：恋人 "+partner.name+" が道連れで死亡"); }
+      }
+    }
+  }
+  return deaths;
+}
+function hunterShotStep(deadHunter, next){
+  // ハンターが襲撃・処刑・独裁・道連れで死んだら、道連れを選ぶ
+  passTo(deadHunter,"ハンターの道連れです。周りに見られないでください。",()=>{
+    const targets=alivePlayers().filter(x=>x.id!==deadHunter.id).map(x=>({id:x.id,name:x.name}));
+    if(!targets.length){ next(); return; }
+    pickAction("🏹 道連れにする人を選んでください","あなたはハンターです。倒れるとき、1人を道連れにできます。「対象を選ばない」を押すと道連れなしです。",targets,(tid)=>{
+      if(tid===null){ log(S.day+"日目：ハンター "+deadHunter.name+" は道連れをしなかった"); next(); return; }
+      const t=S.players[tid]; t.alive=false;
+      log(S.day+"日目：ハンターの道連れで "+t.name+" が死亡（役職："+ROLES[t.role].name+"）");
+      const chain=[t];
+      if(t.role==="fox") foxFollowersDie().forEach(p=>chain.push(p));
+      loverChainDie(chain);
+      showGm("🏹 ハンターの道連れ","<p style='font-size:18px'><b>"+deadHunter.name+"</b> さん（ハンター）が <b>"+t.name+"</b> さんを道連れにしました。</p>",()=>{
+        if(t.role==="hunter"){ hunterShotStep(t, next); return; }
+        next();
+      });
+    });
+  },"🏹");
+}
 function foxFollowersDie(){
   const dead=[];
   if(!S.players.some(p=>p.alive&&p.role==="fox")){
@@ -584,6 +639,7 @@ function resolveNight(){
     if(fx && fx.alive){ fx.alive=false; deaths.push(fx); log(S.day+"日目朝：妖狐 "+fx.name+" が呪殺で死亡"); }
   }
   foxFollowersDie().forEach(p=>deaths.push(p));
+  loverChainDie(deaths);
   let revived=null;
   if(S.night.revive!==null && S.night.revive!==undefined){
     const rv=S.players[S.night.revive];
@@ -600,8 +656,10 @@ function resolveNight(){
   if(!deaths.length && S.day>1) log(S.day+"日目朝：死者なし");
   if(S.day===1 && !deaths.length) log(S.day+"日目朝：初日襲いなしのため死者なし（呪殺等があれば別）");
   showGm("☀️ "+S.day+"日目の朝", body, ()=>{
-    if(checkWin()) return;
-    startDayDiscussion();
+    const atkV=(S.night.kill!==null&&S.night.kill!==undefined)? S.players[S.night.kill] : null;
+    const after=()=>{ if(checkWin()) return; startDayDiscussion(); };
+    if(atkV && atkV.role==="hunter" && !atkV.alive && deaths.includes(atkV)){ hunterShotStep(atkV, after); return; }
+    after();
   });
 }
 
@@ -609,8 +667,31 @@ function resolveNight(){
 function startDayDiscussion(){
   const sec=S.options.timer;
   let body="<p>生存者で議論してください。誰が人狼か話し合い、終わったら投票に進んでください。</p>";
-  showGm("🗣️ "+S.day+"日目の議論", body, ()=>{ startVoting(0,{}); }, sec>0);
+  showGm("🗣️ "+S.day+"日目の議論", body, ()=>{ dictatorCheck(()=>startVoting(0,{})); }, sec>0);
   if(sec>0) setupTimer(sec);
+}
+function dictatorCheck(next){
+  const d=S.players.find(p=>p.alive&&p.role==="dictator"&&!p.dictUsed);
+  if(!d){ next(); return; }
+  passTo(d,"独裁者の能力を使うか確認します。周りに見られないでください。",()=>{
+    const targets=alivePlayers().filter(x=>x.id!==d.id).map(x=>({id:x.id,name:x.name}));
+    pickAction("👑 独裁者：追放する人を選ぶ","使うと正体が全員に公開され、議論を終わらせてその人を追放します（今日の投票はなし）。「対象を選ばない」を押すと使わずに投票へ進みます。",targets,(tid)=>{
+      if(tid===null){ next(); return; }
+      d.dictUsed=true;
+      const t=S.players[tid]; t.alive=false; S.lastExecuted=t;
+      log(S.day+"日目：独裁者 "+d.name+" が正体を明かし、"+t.name+" を追放（役職："+ROLES[t.role].name+"）");
+      const chain=[t];
+      if(t.role==="fox") foxFollowersDie().forEach(p=>chain.push(p));
+      loverChainDie(chain);
+      let extraMsg="";
+      if(chain.length>1) extraMsg="<p style='margin-top:8px'>さらに <b>"+chain.slice(1).map(p=>p.name).join("、")+"</b> さんが死亡しました。</p>";
+      showGm("👑 独裁者の追放","<p style='font-size:18px'><b>"+d.name+"</b> さんが独裁者として正体を明かし、<b>"+t.name+"</b> さんを追放しました。</p>"+extraMsg+"<p class='muted'>今日の投票はありません。そのまま夜になります。</p>",()=>{
+        const after=()=>{ if(checkWin()) return; startNight(); };
+        if(t.role==="hunter"){ hunterShotStep(t, after); return; }
+        after();
+      });
+    });
+  },"👑");
 }
 function startVoting(idx, votes){
   const voters=alivePlayers();
@@ -654,9 +735,11 @@ function resolveVote(votes){
     const fol=foxFollowersDie();
     if(fol.length) extraMsg="<p style='margin-top:8px'>さらに <b>"+fol.map(p=>p.name).join("、")+"</b> さんが死亡しました。</p>";
   }
+  if(target.role==="lover"){ const lc=[target]; loverChainDie(lc); if(lc.length>1) extraMsg+="<p style='margin-top:8px'>さらに恋人の <b>"+lc.slice(1).map(p=>p.name).join("、")+"</b> さんが道連れで死亡しました。</p>"; }
   showGm("🗳️ 投票結果","<p>得票："+detail+"</p><p style='margin-top:8px;font-size:18px'><b>"+target.name+"</b> さんが処刑されました。</p>"+extraMsg+"<p class='muted'>役職はゲーム終了まで秘密です（霊媒師だけが夜に分かります）。</p>",()=>{
-    if(checkWin()) return;
-    startNight();
+    const after=()=>{ if(checkWin()) return; startNight(); };
+    if(target.role==="hunter"){ hunterShotStep(target, after); return; }
+    after();
   });
 }
 
@@ -665,6 +748,9 @@ function checkWin(){
   const w=aliveWolves().length, v=aliveNonWolves().length;
   if(w===0 || w>=v){
     if(S.players.some(p=>p.alive&&p.role==="fox")){ endGame("fox","ゲーム終了時に妖狐が生き残っていました。"); return true; }
+    if(S.players.some(p=>p.alive&&p.role==="god")){ endGame("god","ゲーム終了時に神様が生き残っていました。"); return true; }
+    const lvs=S.players.filter(p=>p.role==="lover");
+    if(lvs.length===2 && lvs.every(p=>p.alive)){ endGame("lover","恋人2人が最後まで生き残りました。"); return true; }
     if(w===0){ endGame("village","人狼が全員いなくなりました。"); return true; }
     endGame("wolf","人狼の数が村人側と同数以上になりました。"); return true;
   }
@@ -674,7 +760,9 @@ const WINNER_INFO={
   village:{icon:"🎉", title:"村人陣営の勝利！"},
   wolf:{icon:"🐺", title:"人狼陣営の勝利！"},
   fox:{icon:"🦊", title:"妖狐陣営の勝利！"},
-  teruteru:{icon:"🌤️", title:"てるてる坊主の単独勝利！"}
+  teruteru:{icon:"🌤️", title:"てるてる坊主の単独勝利！"},
+  god:{icon:"🌟", title:"神様の単独勝利！"},
+  lover:{icon:"💘", title:"恋人ペアの勝利！"}
 };
 function endGame(winner, reason){
   S.phase="end";
@@ -716,9 +804,9 @@ function updateTimerLabel(){ const m=Math.floor(Math.max(0,S.timerSec)/60), s=Ma
 function stopTimer(){ if(S&&S.timerId){ clearInterval(S.timerId); S.timerId=null; } }
 
 // ===== Online mode (no chat) =====
-const ROLE_ICONS={wolf:"🐺",madman:"🃏",seer:"🔮",knight:"🛡️",medium:"👻",villager:"🧑‍🌾",fox:"🦊",haitoku:"😈",fanatic:"👁️",nekomata:"🐱",teruteru:"🌤️"};
-const ROLE_NAMES={wolf:"人狼",seer:"占い師",knight:"騎士",medium:"霊媒師",madman:"狂人",fanatic:"狂信者",fox:"妖狐",haitoku:"背徳者",nekomata:"猫又",teruteru:"てるてる坊主",villager:"村人"};
-const ONLINE_ROLE_KEYS=["wolf","seer","knight","medium","madman","fanatic","fox","haitoku","nekomata","teruteru","villager"];
+const ROLE_ICONS={wolf:"🐺",madman:"🃏",seer:"🔮",knight:"🛡️",medium:"👻",villager:"🧑‍🌾",fox:"🦊",haitoku:"😈",fanatic:"👁️",nekomata:"🐱",teruteru:"🌤️",hunter:"🏹",twins:"👥",dictator:"👑",god:"🌟",lover:"💘"};
+const ROLE_NAMES={wolf:"人狼",seer:"占い師",knight:"騎士",medium:"霊媒師",madman:"狂人",fanatic:"狂信者",fox:"妖狐",haitoku:"背徳者",nekomata:"猫又",teruteru:"てるてる坊主",hunter:"ハンター",twins:"共有者",dictator:"独裁者",god:"神様",lover:"恋人",villager:"村人"};
+const ONLINE_ROLE_KEYS=["wolf","seer","knight","medium","madman","fanatic","fox","haitoku","nekomata","teruteru","hunter","twins","dictator","god","lover","villager"];
 let O=null, oTimer=null;
 let helpReturn="scr-setup";
 function openHelp(from){ helpReturn=from; show("scr-help"); }
@@ -779,14 +867,17 @@ async function refreshOnline(){
 }
 function renderOnline(v){
   $("ogRoom").textContent=v.room;
-  const phaseLabel={lobby:"ロビー：参加者を待っています",night:v.day+"日目の夜",morning:v.day+"日目の朝",discussion:v.day+"日目の議論",voting:v.day+"日目の投票",voteResult:v.day+"日目の投票結果",end:"ゲーム終了"};
+  const phaseLabel={lobby:"ロビー：参加者を待っています",night:v.day+"日目の夜",morning:v.day+"日目の朝",discussion:v.day+"日目の議論",voting:v.day+"日目の投票",voteResult:v.day+"日目の投票結果",hunterShot:"ハンターの道連れ",end:"ゲーム終了"};
   $("ogPhase").textContent=phaseLabel[v.phase]||v.phase;
   // role
-  if(v.myRole){ $("ogRoleIcon").textContent=ROLE_ICONS[v.myRole]; $("ogRoleName").textContent=v.myRoleName; $("ogRoleTeam").textContent=({"wolf":"人狼陣営","madman":"人狼陣営","fanatic":"人狼陣営","fox":"妖狐陣営","haitoku":"妖狐陣営","teruteru":"単独（処刑されたら勝利）"})[v.myRole]||"村人陣営";
+  if(v.myRole){ $("ogRoleIcon").textContent=ROLE_ICONS[v.myRole]; $("ogRoleName").textContent=v.myRoleName; $("ogRoleTeam").textContent=({"wolf":"人狼陣営","madman":"人狼陣営","fanatic":"人狼陣営","fox":"妖狐陣営","haitoku":"妖狐陣営","teruteru":"単独（処刑されたら勝利）","god":"単独（最後まで生き残れば勝利）","lover":"恋人ペア（2人で生き残れば勝利）"})[v.myRole]||"村人陣営";
     let ex=""; if(v.wolfMates&&v.wolfMates.length) ex="仲間の人狼："+v.wolfMates.join("、");
     if(v.seerResult) ex+=" 🔮 最新の占い："+v.seerResult.targetName+" は「"+(v.seerResult.isWolf?"人狼":"人狼ではない")+"」（"+v.seerResult.day+"日目）";
     if(v.mediumResult) ex+=" 👻 霊媒："+v.mediumResult.targetName+" は「"+(v.mediumResult.isWolf?"人狼だった":"人狼ではなかった")+"」";
     if(v.foxName) ex+=" 🦊 妖狐は："+v.foxName;
+    if(v.twinMates&&v.twinMates.length) ex+=" 👥 仲間の共有者："+v.twinMates.join("、");
+    if(v.loverName) ex+=" 💘 あなたの恋人："+v.loverName;
+    if(v.allRoles) ex+=" 🌟 全員の役職："+v.allRoles.map(r=>r.name+"＝"+r.role+(r.alive?"":"（死亡）")).join("、");
     if(v.myRole==="fanatic"&&v.wolfMates&&v.wolfMates.length) ex+=" 🐺 人狼は："+v.wolfMates.join("、");
     $("ogRoleExtra").textContent=ex;
   }
@@ -795,10 +886,11 @@ function renderOnline(v){
   if(v.phase==="lobby") msg="<p>部屋コードを友達に教えてください。ホストが開始すると役職が配られます。役職構成は人数で自動決定されます。ハウスルール：初日の夜は占いだけ（ランダム白）です。</p>";
   if(v.phase==="night") msg="<p>夜です。"+(v.action?"あなたの行動を選んでください。":(v.waitInfo||"他の人の行動を待っています…"))+"</p>";
   if(v.phase==="morning") msg="<p style='font-size:17px'>"+v.morningMsg+"</p><p class='muted'>ホストが次へ進めると議論が始まります。</p>";
-  if(v.phase==="discussion") msg="<p>議論してください。チャット機能はないので、通話や対面で話してください。ホストが投票に進めます。</p>";
+  if(v.phase==="discussion") msg="<p>議論してください。チャット機能はないので、通話や対面で話してください。ホストが投票に進めます。</p>"+(v.action&&v.action.type==="dictator"?"<p>👑 あなたは独裁者です。下のボタンから能力を使えます（使うと議論は終わります）。</p>":"");
+  if(v.phase==="hunterShot") msg="<p>"+(v.action?"あなたはハンターです。道連れにする人を選んでください。":(v.waitInfo||"ハンターが道連れを選んでいます…"))+"</p>";
   if(v.phase==="voting") msg="<p>"+(v.action?"投票してください。":v.waiting)+"</p>";
   if(v.phase==="voteResult") msg="<p>"+v.voteDetail+"</p><p style='font-size:17px;margin-top:6px'>"+v.voteMsg+"</p>";
-  if(v.phase==="end") msg="<p style='font-size:19px'><b>"+(({village:"🎉 村人陣営の勝利！",wolf:"🐺 人狼陣営の勝利！",fox:"🦊 妖狐陣営の勝利！",teruteru:"🌤️ てるてる坊主の単独勝利！"})[v.winner]||"ゲーム終了")+"</b></p><p>"+v.endReason+"</p>"+(v.allRoles?"<table>"+v.allRoles.map(r=>"<tr><td>"+r.name+"</td><td>"+r.role+"</td><td>"+(r.alive?"生存":"死亡")+"</td></tr>").join("")+"</table>":"");
+  if(v.phase==="end") msg="<p style='font-size:19px'><b>"+(({village:"🎉 村人陣営の勝利！",wolf:"🐺 人狼陣営の勝利！",fox:"🦊 妖狐陣営の勝利！",teruteru:"🌤️ てるてる坊主の単独勝利！",god:"🌟 神様の単独勝利！",lover:"💘 恋人ペアの勝利！"})[v.winner]||"ゲーム終了")+"</b></p><p>"+v.endReason+"</p>"+(v.allRoles?"<table>"+v.allRoles.map(r=>"<tr><td>"+r.name+"</td><td>"+r.role+"</td><td>"+(r.alive?"生存":"死亡")+"</td></tr>").join("")+"</table>":"");
   if(!v.myAlive && v.phase!=="lobby" && v.phase!=="end") msg+="<p class='muted'>あなたは死亡しています。終わるまで見守ってください。</p>";
   $("ogMsg").innerHTML=msg;
   // actions
@@ -807,11 +899,16 @@ function renderOnline(v){
     v.action.targets.forEach(t=>{
       const b=document.createElement("button"); b.className="pick"; b.textContent=t.name;
       b.onclick=async()=>{ box.querySelectorAll("button").forEach(x=>x.disabled=true);
-        try{ const nv=await post(v.action.type==="vote"?"/api/vote":"/api/night",{room:v.room,pid:O.pid,token:O.token,target:t.id}); renderOnline(nv); }
+        try{ const nv=await post(v.action.type==="vote"?"/api/vote":(v.action.type==="dictator"?"/api/dictate":(v.action.type==="hunter"?"/api/hunter":"/api/night")),{room:v.room,pid:O.pid,token:O.token,target:t.id}); renderOnline(nv); }
         catch(e){ alert(e.message); refreshOnline(); } };
       box.appendChild(b);
     });
     const h=document.createElement("h3"); h.textContent=v.action.title; box.prepend(h);
+  }
+  if(v.action&&v.action.type==="hunter"){
+    const sk=document.createElement("button"); sk.className="sub"; sk.textContent="道連れにしない";
+    sk.onclick=async()=>{ try{ const nv=await post("/api/hunter",{room:v.room,pid:O.pid,token:O.token,target:-1}); renderOnline(nv); }catch(e){ alert(e.message); refreshOnline(); } };
+    box.appendChild(sk);
   }
   if(v.action&&v.action.type==="knight"){
     const sk=document.createElement("button"); sk.className="sub"; sk.textContent="今晩は誰も守らない";
@@ -850,7 +947,7 @@ function renderOnline(v){
   } else cfgCard.classList.add("hidden");
   $("ogStart").classList.toggle("hidden", !(v.isHost&&v.phase==="lobby"));
   $("ogAdvance").classList.toggle("hidden", !v.canAdvance);
-  $("ogAdvance").textContent = v.phase==="voting" ? "ホスト：投票を締め切る（未投票の人は棄権）" : (v.phase==="night" ? "ホスト：夜を進める（未行動の人は行動なしで確定）" : "ホスト：次へ進める");
+  $("ogAdvance").textContent = v.phase==="voting" ? "ホスト：投票を締め切る（未投票の人は棄権）" : (v.phase==="night" ? "ホスト：夜を進める（未行動の人は行動なしで確定）" : (v.phase==="hunterShot" ? "ホスト：道連れをスキップする" : "ホスト：次へ進める"));
   $("ogPlayers").innerHTML=v.players.map(p=>"<span class='chip "+(p.alive?"":"dead")+"'>"+(p.alive?"🟢":"💀")+" "+p.name+(p.host?"（ホスト）":"")+(p.left?" 📴退出":(p.idle&&v.phase!=="lobby"?" 😴応答なし":""))+"</span>").join("");
   $("ogLog").textContent=(v.publicLog||[]).join("\n");
 }
