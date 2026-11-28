@@ -133,7 +133,7 @@ export class RoomDO {
     const d=this.data;
     const v={
       room:d.room, phase:d.phase, day:d.day,
-      players:d.players.map(p=>({id:p.id, name:p.name, alive:p.alive, host:p.id===d.hostId})),
+      players:d.players.map(p=>({id:p.id, name:p.name, alive:p.alive, host:p.id===d.hostId, idle:(Date.now()-(p.lastSeen||0)>45000)})),
       meId: me?me.id:null, isHost: me? me.id===d.hostId:false,
       myAlive: me? me.alive:null,
       publicLog:d.publicLog, morningMsg:d.morningMsg||"", voteMsg:d.voteMsg||"", voteDetail:d.voteDetail||"",
@@ -176,7 +176,7 @@ export class RoomDO {
         else v.acted=true;
       }
     }
-    if(me && me.id===d.hostId && ["morning","discussion","voting","voteResult"].includes(d.phase)) v.canAdvance=true;
+    if(me && me.id===d.hostId && ["night","morning","discussion","voting","voteResult"].includes(d.phase)) v.canAdvance=true;
     // progress hints
     if(d.phase==="night") v.waiting="夜の行動が終わるのを待っています…";
     if(d.phase==="voting") v.waiting="全員の投票を待っています（"+Object.keys(d.votes).length+"/"+this.alive().length+"）";
@@ -191,7 +191,7 @@ export class RoomDO {
       if(!name) return json({error:"名前を入れてください"},400);
       const pid=0;
       this.data={ room:url.searchParams.get("room")||"", hostId:pid, phase:"lobby", day:0,
-        players:[{id:pid,name,token:token(),role:null,alive:true}],
+        players:[{id:pid,name,token:token(),role:null,alive:true,lastSeen:Date.now()}],
         night:null, votes:{}, publicLog:["部屋が作られました"], seerResults:{}, mediumResult:null, roleCfg:null,
         lastGuard:null, lastExecuted:null, morningMsg:"", voteMsg:"", voteDetail:"", winner:null, endReason:"" };
       await this.save();
@@ -207,7 +207,7 @@ export class RoomDO {
       if(this.data.players.length>=30) return json({error:"部屋が満員です（最大30人）"},400);
       const pid=Math.max(...this.data.players.map(p=>p.id))+1;
       const tk=token();
-      this.data.players.push({id:pid,name,token:tk,role:null,alive:true});
+      this.data.players.push({id:pid,name,token:tk,role:null,alive:true,lastSeen:Date.now()});
       this.data.publicLog.push(name+" が参加しました");
       await this.save();
       return json({room:this.data.room, pid, token:tk});
@@ -215,11 +215,25 @@ export class RoomDO {
     if(path==="/state"){
       const me=this.auth({pid:Number(url.searchParams.get("pid")), token:url.searchParams.get("token")});
       if(!me) return json({error:"認証エラー。再参加してください"},401);
+      let dirty=false;
+      if(Date.now()-(me.lastSeen||0)>15000){ me.lastSeen=Date.now(); dirty=true; }
+      // ホストが90秒以上応答なしなら、最近まで応答していた人にホストを自動で移す
+      const hostP=this.data.players.find(p=>p.id===this.data.hostId);
+      if(hostP && Date.now()-(hostP.lastSeen||0)>90000 && this.data.players.length>1){
+        const cand=this.data.players.filter(p=>p.id!==hostP.id).sort((a,b)=>(b.lastSeen||0)-(a.lastSeen||0))[0];
+        if(cand && Date.now()-(cand.lastSeen||0)<=90000){
+          this.data.hostId=cand.id;
+          this.data.publicLog.push("ホストが応答しなくなったため、"+cand.name+" さんがホストになりました");
+          dirty=true;
+        }
+      }
+      if(dirty) await this.save();
       return json(this.view(me));
     }
     // everything below needs auth in body
     const me=this.auth(body);
     if(!me) return json({error:"認証エラー"},401);
+    me.lastSeen=Date.now();
     if(path==="/config"){
       if(me.id!==this.data.hostId) return json({error:"ホストだけが役職を変更できます"},403);
       if(this.data.phase!=="lobby") return json({error:"開始後は変更できません"},400);
@@ -333,6 +347,7 @@ export class RoomDO {
       if(d.phase==="morning"){ d.phase="discussion"; }
       else if(d.phase==="discussion"){ d.phase="voting"; d.votes={}; }
       else if(d.phase==="voting"){ this.resolveVote(); }
+      else if(d.phase==="night"){ await this.resolveNight(); }
       else if(d.phase==="voteResult"){
         d.day++; d.phase="night"; d.night={kill:null, guard:null, seerActed:false, knightActed:false, nekoActed:false, revive:null, curseFox:null}; d.voteMsg=""; d.voteDetail="";
       } else return json({error:"今は進められません"},400);
