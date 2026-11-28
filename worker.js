@@ -176,7 +176,7 @@ export class RoomDO {
         else v.acted=true;
       }
     }
-    if(me && me.id===d.hostId && ["morning","discussion","voteResult"].includes(d.phase)) v.canAdvance=true;
+    if(me && me.id===d.hostId && ["morning","discussion","voting","voteResult"].includes(d.phase)) v.canAdvance=true;
     // progress hints
     if(d.phase==="night") v.waiting="夜の行動が終わるのを待っています…";
     if(d.phase==="voting") v.waiting="全員の投票を待っています（"+Object.keys(d.votes).length+"/"+this.alive().length+"）";
@@ -332,6 +332,7 @@ export class RoomDO {
       if(me.id!==d.hostId) return json({error:"ホストだけが進められます"},403);
       if(d.phase==="morning"){ d.phase="discussion"; }
       else if(d.phase==="discussion"){ d.phase="voting"; d.votes={}; }
+      else if(d.phase==="voting"){ this.resolveVote(); }
       else if(d.phase==="voteResult"){
         d.day++; d.phase="night"; d.night={kill:null, guard:null, seerActed:false, knightActed:false, nekoActed:false, revive:null, curseFox:null}; d.voteMsg=""; d.voteDetail="";
       } else return json({error:"今は進められません"},400);
