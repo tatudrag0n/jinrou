@@ -139,10 +139,16 @@ td,th{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left}
     <p class="muted">部屋を作るか、友達から教えてもらった4文字の部屋コードで参加します。議論用のチャット機能はありません。DiscordやLINE通話など、別の手段で話してください。</p>
     <h3 style="margin-top:14px">あなたの名前</h3>
     <input type="text" id="onName" maxlength="12" placeholder="名前（12文字まで）">
+    <label style="display:block;margin:8px 0;font-size:14px"><input type="checkbox" id="onPublic" checked style="width:auto;margin-right:6px">部屋検索に表示する（公開ルーム）</label>
     <button id="btnCreateRoom">部屋を作る（ホストになる）</button>
     <h3 style="margin-top:18px">部屋に参加する</h3>
     <input type="text" id="onRoomCode" maxlength="4" placeholder="部屋コード（例：AB3K）" style="text-transform:uppercase">
     <button class="sub" id="btnJoinRoom">この部屋に参加する</button>
+    <h3 style="margin-top:18px">🔍 部屋を探す</h3>
+    <p class="muted">公開中の部屋の一覧です。ホスト名や部屋コードで絞り込めます。</p>
+    <input type="text" id="onSearchQ" placeholder="ホスト名・部屋コードで検索">
+    <button class="sub" id="btnSearchRooms">検索する／更新</button>
+    <div id="onRoomList" style="margin-top:8px"></div>
     <p id="onError" style="color:var(--red);font-size:14px;margin-top:8px"></p>
     <button class="sub" id="btnHelp2">📖 遊び方と役職の簡単な説明</button>
     <button class="sub" id="btnBackLocal">ローカルモードに戻る</button>
@@ -720,7 +726,7 @@ $("btnHelp1").onclick=()=>openHelp("scr-setup");
 $("btnHelp2").onclick=()=>openHelp("scr-online");
 $("btnHelp3").onclick=()=>openHelp("scr-ogame");
 $("btnHelpBack").onclick=()=>{ show(helpReturn); if(helpReturn==="scr-ogame") refreshOnline(); };
-$("btnGoOnline").onclick=()=>{ show("scr-online"); };
+$("btnGoOnline").onclick=()=>{ show("scr-online"); loadRooms(); };
 $("btnBackLocal").onclick=()=>{ show("scr-setup"); };
 async function api(path, opts){
   const r=await fetch(path, opts);
@@ -731,7 +737,7 @@ async function api(path, opts){
 function post(path, body){ return api(path,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)}); }
 $("btnCreateRoom").onclick=async()=>{
   const name=$("onName").value.trim(); $("onError").textContent="";
-  try{ const j=await post("/api/create",{name}); O={room:j.room,pid:j.pid,token:j.token}; startOnlinePolling(); }
+  try{ const j=await post("/api/create",{name, public:$("onPublic").checked}); O={room:j.room,pid:j.pid,token:j.token}; startOnlinePolling(); }
   catch(e){ $("onError").textContent=e.message; }
 };
 $("btnJoinRoom").onclick=async()=>{
@@ -739,8 +745,33 @@ $("btnJoinRoom").onclick=async()=>{
   try{ const j=await post("/api/join",{room,name}); O={room:j.room,pid:j.pid,token:j.token}; startOnlinePolling(); }
   catch(e){ $("onError").textContent=e.message; }
 };
+async function loadRooms(){
+  const q=$("onSearchQ").value.trim();
+  const box=$("onRoomList"); box.innerHTML="<p class='muted'>読み込み中…</p>";
+  try{
+    const j=await api("/api/rooms"+(q?("?q="+encodeURIComponent(q)):""));
+    if(!j.rooms.length){ box.innerHTML="<p class='muted'>公開中の部屋はありません。</p>"; return; }
+    box.innerHTML="";
+    j.rooms.forEach(r=>{
+      const row=document.createElement("div"); row.className="stepper";
+      row.innerHTML="<div>🏠 <b>"+r.host+"</b> さんの部屋 <span class='muted'>（コード "+r.code+"）</span></div><div>👥 "+r.count+"人</div>";
+      const b=document.createElement("button"); b.textContent="参加する";
+      b.onclick=async()=>{
+        const name=$("onName").value.trim(); $("onError").textContent="";
+        if(!name){ $("onError").textContent="先に「あなたの名前」を入れてください"; return; }
+        try{ const jj=await post("/api/join",{room:r.code,name}); O={room:jj.room,pid:jj.pid,token:jj.token}; startOnlinePolling(); }
+        catch(e){ $("onError").textContent=e.message; }
+      };
+      row.appendChild(b); box.appendChild(row);
+    });
+  }catch(e){ box.innerHTML="<p class='muted'>一覧を取得できませんでした。</p>"; }
+}
+$("btnSearchRooms").onclick=loadRooms;
+let searchDeb=null;
+$("onSearchQ").addEventListener("input",()=>{ clearTimeout(searchDeb); searchDeb=setTimeout(loadRooms,400); });
 function startOnlinePolling(){ show("scr-ogame"); refreshOnline(); if(oTimer)clearInterval(oTimer); oTimer=setInterval(refreshOnline,2000); }
-$("ogLeave").onclick=()=>{ if(oTimer)clearInterval(oTimer); O=null; show("scr-setup"); };
+$("ogLeave").onclick=async()=>{ if(oTimer)clearInterval(oTimer); if(O){ try{ await post("/api/leave",{room:O.room,pid:O.pid,token:O.token}); }catch(e){} } O=null; show("scr-setup"); };
+window.addEventListener("pagehide",()=>{ if(O&&navigator.sendBeacon){ try{ navigator.sendBeacon("/api/leave", new Blob([JSON.stringify({room:O.room,pid:O.pid,token:O.token})],{type:"application/json"})); }catch(e){} } });
 async function refreshOnline(){
   if(!O) return;
   try{ const v=await api("/api/state?room="+O.room+"&pid="+O.pid+"&token="+O.token); renderOnline(v); }
@@ -820,7 +851,7 @@ function renderOnline(v){
   $("ogStart").classList.toggle("hidden", !(v.isHost&&v.phase==="lobby"));
   $("ogAdvance").classList.toggle("hidden", !v.canAdvance);
   $("ogAdvance").textContent = v.phase==="voting" ? "ホスト：投票を締め切る（未投票の人は棄権）" : (v.phase==="night" ? "ホスト：夜を進める（未行動の人は行動なしで確定）" : "ホスト：次へ進める");
-  $("ogPlayers").innerHTML=v.players.map(p=>"<span class='chip "+(p.alive?"":"dead")+"'>"+(p.alive?"🟢":"💀")+" "+p.name+(p.host?"（ホスト）":"")+(p.idle&&v.phase!=="lobby"?" 😴応答なし":"")+"</span>").join("");
+  $("ogPlayers").innerHTML=v.players.map(p=>"<span class='chip "+(p.alive?"":"dead")+"'>"+(p.alive?"🟢":"💀")+" "+p.name+(p.host?"（ホスト）":"")+(p.left?" 📴退出":(p.idle&&v.phase!=="lobby"?" 😴応答なし":""))+"</span>").join("");
   $("ogLog").textContent=(v.publicLog||[]).join("\n");
 }
 $("ogStart").onclick=async()=>{ try{ const v=await post("/api/start",{room:O.room,pid:O.pid,token:O.token}); renderOnline(v); }catch(e){ alert(e.message); } };
