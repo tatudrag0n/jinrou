@@ -64,14 +64,14 @@ export class RoomDO {
   }
   nightComplete(){
     const d=this.data, n=d.night;
-    const wolfDone = d.day===1 ? true : n.kill!==null; // 初日襲撃なし
+    const wolfDone = d.day===1 ? true : (n.kill!==null || this.wolves().every(p=>p.left)); // 初日襲撃なし／人狼が全員退出したら進める
     const seer = d.players.find(p=>p.alive&&p.role==="seer");
-    const seerDone = !seer || n.seerActed;
+    const seerDone = !seer || n.seerActed || seer.left;
     const knight = d.players.find(p=>p.alive&&p.role==="knight");
     const knightLegal = knight ? d.players.filter(p=>p.alive && p.id!==knight.id && p.id!==d.lastGuard).length : 0;
-    const knightDone = !knight || d.day===1 || n.knightActed || knightLegal===0; // 初日守りなし＋守れる相手がいない場合は自動で完了（詰み防止）
+    const knightDone = !knight || d.day===1 || n.knightActed || knightLegal===0 || knight.left; // 初日守りなし＋守れる相手がいない場合は自動で完了（詰み防止）
     const neko = d.players.find(p=>p.alive&&p.role==="nekomata"&&!p.nekoUsed);
-    const nekoDone = d.day===1 || !neko || !d.players.some(p=>!p.alive) || n.nekoActed; // 初日の夜は占いだけ
+    const nekoDone = d.day===1 || !neko || !d.players.some(p=>!p.alive) || n.nekoActed || neko.left; // 初日の夜は占いだけ
     return wolfDone && seerDone && knightDone && nekoDone;
   }
   async resolveNight(){
@@ -129,11 +129,20 @@ export class RoomDO {
     d.phase="voteResult";
     this.checkWin();
   }
+  async syncRegistry(){
+    const d=this.data; if(!d) return;
+    try{
+      const stub=this.env.REGISTRY.get(this.env.REGISTRY.idFromName("global"));
+      const hostP=d.players.find(p=>p.id===d.hostId);
+      await stub.fetch("https://registry/register",{method:"POST",headers:{"content-type":"application/json"},
+        body:JSON.stringify({code:d.room, host:hostP?hostP.name:"", count:d.players.length, isPublic:!!d.isPublic, phase:d.phase})});
+    }catch(e){}
+  }
   view(me){
     const d=this.data;
     const v={
       room:d.room, phase:d.phase, day:d.day,
-      players:d.players.map(p=>({id:p.id, name:p.name, alive:p.alive, host:p.id===d.hostId, idle:(Date.now()-(p.lastSeen||0)>45000)})),
+      players:d.players.map(p=>({id:p.id, name:p.name, alive:p.alive, host:p.id===d.hostId, left:!!p.left, idle:(!p.left && Date.now()-(p.lastSeen||0)>45000)})),
       meId: me?me.id:null, isHost: me? me.id===d.hostId:false,
       myAlive: me? me.alive:null,
       publicLog:d.publicLog, morningMsg:d.morningMsg||"", voteMsg:d.voteMsg||"", voteDetail:d.voteDetail||"",
@@ -193,8 +202,9 @@ export class RoomDO {
       this.data={ room:url.searchParams.get("room")||"", hostId:pid, phase:"lobby", day:0,
         players:[{id:pid,name,token:token(),role:null,alive:true,lastSeen:Date.now()}],
         night:null, votes:{}, publicLog:["部屋が作られました"], seerResults:{}, mediumResult:null, roleCfg:null,
-        lastGuard:null, lastExecuted:null, morningMsg:"", voteMsg:"", voteDetail:"", winner:null, endReason:"" };
+        lastGuard:null, lastExecuted:null, morningMsg:"", voteMsg:"", voteDetail:"", winner:null, endReason:"", isPublic: body.public!==false, lastReg:0 };
       await this.save();
+      await this.syncRegistry();
       return json({room:this.data.room, pid, token:this.data.players[0].token});
     }
     await this.load();
@@ -210,13 +220,16 @@ export class RoomDO {
       this.data.players.push({id:pid,name,token:tk,role:null,alive:true,lastSeen:Date.now()});
       this.data.publicLog.push(name+" が参加しました");
       await this.save();
+      await this.syncRegistry();
       return json({room:this.data.room, pid, token:tk});
     }
     if(path==="/state"){
       const me=this.auth({pid:Number(url.searchParams.get("pid")), token:url.searchParams.get("token")});
       if(!me) return json({error:"認証エラー。再参加してください"},401);
       let dirty=false;
+      if(me.left){ me.left=false; this.data.publicLog.push(me.name+" さんが戻ってきました"); dirty=true; }
       if(Date.now()-(me.lastSeen||0)>15000){ me.lastSeen=Date.now(); dirty=true; }
+      if(this.data.phase==="lobby" && this.data.isPublic && Date.now()-(this.data.lastReg||0)>60000){ this.data.lastReg=Date.now(); await this.syncRegistry(); }
       // ホストが90秒以上応答なしなら、最近まで応答していた人にホストを自動で移す
       const hostP=this.data.players.find(p=>p.id===this.data.hostId);
       if(hostP && Date.now()-(hostP.lastSeen||0)>90000 && this.data.players.length>1){
@@ -269,6 +282,7 @@ export class RoomDO {
         }
         if(this.nightComplete()) await this.resolveNight();
       }
+      await this.syncRegistry();
       this.data.publicLog.push("ゲーム開始："+n+"人（"+ROLE_KEYS.filter(k=>cfg[k]).map(k=>ROLE_DEFS[k].name+"×"+cfg[k]).join(" ")+"）");
       await this.save();
       return json(this.view(me));
@@ -337,7 +351,7 @@ export class RoomDO {
       const target=Number(body.target); const tp=d.players[target];
       if(!tp || !tp.alive || tp.id===me.id) return json({error:"対象が不正です"},400);
       d.votes[me.id]=target;
-      if(Object.keys(d.votes).length>=this.alive().length) this.resolveVote();
+      if(Object.keys(d.votes).length>=this.alive().filter(p=>!p.left).length) this.resolveVote();
       await this.save();
       return json(this.view(me));
     }
@@ -352,7 +366,61 @@ export class RoomDO {
         d.day++; d.phase="night"; d.night={kill:null, guard:null, seerActed:false, knightActed:false, nekoActed:false, revive:null, curseFox:null}; d.voteMsg=""; d.voteDetail="";
       } else return json({error:"今は進められません"},400);
       await this.save();
+      await this.syncRegistry();
       return json(this.view(me));
+    }
+    if(path==="/leave"){
+      const d=this.data;
+      if(d.phase==="lobby"){
+        const wasHost = me.id===d.hostId;
+        d.players=d.players.filter(p=>p.id!==me.id);
+        d.publicLog.push(me.name+" さんが退出しました");
+        if(wasHost && d.players.length){ d.hostId=d.players[0].id; d.publicLog.push(d.players[0].name+" さんがホストになりました"); }
+        await this.save();
+        await this.syncRegistry();
+        return json({ok:true});
+      }
+      if(!me.left){
+        me.left=true; me.leftAt=Date.now();
+        d.publicLog.push(me.name+" さんが退出しました");
+        if(me.id===d.hostId){
+          const cand=d.players.filter(p=>p.id!==me.id && !p.left).sort((a,b)=>((b.alive?1:0)-(a.alive?1:0)) || ((b.lastSeen||0)-(a.lastSeen||0)))[0];
+          if(cand){ d.hostId=cand.id; d.publicLog.push(cand.name+" さんがホストになりました"); }
+        }
+        if(d.phase==="night" && this.nightComplete()) await this.resolveNight();
+        if(d.phase==="voting" && Object.keys(d.votes).length>=this.alive().filter(p=>!p.left).length && Object.keys(d.votes).length>0) this.resolveVote();
+        await this.save();
+        await this.syncRegistry();
+      }
+      return json({ok:true});
+    }
+    return json({error:"not found"},404);
+  }
+}
+
+export class RegistryDO {
+  constructor(state, env){ this.state=state; this.env=env; }
+  async fetch(request){
+    const url=new URL(request.url);
+    let rooms = await this.state.storage.get("rooms") || {};
+    if(url.pathname==="/register"){
+      const b=await request.json().catch(()=>({}));
+      if(b.isPublic && b.phase==="lobby" && b.count>0 && b.code){
+        rooms[b.code]={code:b.code, host:b.host||"", count:b.count, updatedAt:Date.now()};
+      } else if(b.code){ delete rooms[b.code]; }
+      await this.state.storage.put("rooms", rooms);
+      return json({ok:true});
+    }
+    if(url.pathname==="/list"){
+      const q=(url.searchParams.get("q")||"").toLowerCase();
+      const now=Date.now();
+      const list=Object.values(rooms)
+        .filter(r=>now-r.updatedAt<15*60*1000)
+        .filter(r=>!q || r.host.toLowerCase().includes(q) || r.code.toLowerCase().includes(q))
+        .sort((a,b)=>b.updatedAt-a.updatedAt)
+        .slice(0,30)
+        .map(r=>({code:r.code, host:r.host, count:r.count}));
+      return json({rooms:list});
     }
     return json({error:"not found"},404);
   }
@@ -367,6 +435,11 @@ function makeCode(){
 export default {
   async fetch(request, env){
     const url=new URL(request.url);
+    if(url.pathname==="/api/rooms"){
+      const stub=env.REGISTRY.get(env.REGISTRY.idFromName("global"));
+      const fwd=new URL(url.toString()); fwd.pathname="/list";
+      return stub.fetch(fwd.toString());
+    }
     if(url.pathname.startsWith("/api/")){
       let room=(url.searchParams.get("room")||"").toUpperCase();
       let bodyRoom=null;
