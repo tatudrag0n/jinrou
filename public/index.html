@@ -819,6 +819,7 @@ function renderOnline(v){
   } else cfgCard.classList.add("hidden");
   $("ogStart").classList.toggle("hidden", !(v.isHost&&v.phase==="lobby"));
   $("ogAdvance").classList.toggle("hidden", !v.canAdvance);
+  $("ogAdvance").textContent = v.phase==="voting" ? "ホスト：投票を締め切る（未投票の人は棄権）" : "ホスト：次へ進める";
   $("ogPlayers").innerHTML=v.players.map(p=>"<span class='chip "+(p.alive?"":"dead")+"'>"+(p.alive?"🟢":"💀")+" "+p.name+(p.host?"（ホスト）":"")+"</span>").join("");
   $("ogLog").textContent=(v.publicLog||[]).join("\n");
 }
