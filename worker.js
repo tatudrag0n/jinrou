@@ -6,12 +6,14 @@ const ROLE_DEFS = {
   wolf:{name:"人狼"}, madman:{name:"狂人"}, seer:{name:"占い師"},
   knight:{name:"騎士"}, medium:{name:"霊媒師"}, villager:{name:"村人"},
   fox:{name:"妖狐"}, haitoku:{name:"背徳者"}, fanatic:{name:"狂信者"},
-  nekomata:{name:"猫又"}, teruteru:{name:"てるてる坊主"}
+  nekomata:{name:"猫又"}, teruteru:{name:"てるてる坊主"},
+  hunter:{name:"ハンター"}, twins:{name:"共有者"}, dictator:{name:"独裁者"},
+  god:{name:"神様"}, lover:{name:"恋人"}
 };
-const ROLE_KEYS = ["wolf","seer","knight","medium","madman","fanatic","fox","haitoku","nekomata","teruteru","villager"];
+const ROLE_KEYS = ["wolf","seer","knight","medium","madman","fanatic","fox","haitoku","nekomata","teruteru","hunter","twins","dictator","god","lover","villager"];
 function defaultRoles(n){
   const wolves = n>=26?6:(n>=21?5:(n>=16?4:(n>=13?3:(n>=7?2:1))));
-  const cfg = {wolf:wolves, seer:1, knight:n>=6?1:0, medium:n>=9?1:0, madman:n>=7?1:0, fox:0, haitoku:0, fanatic:0, nekomata:0, teruteru:0, villager:0};
+  const cfg = {wolf:wolves, seer:1, knight:n>=6?1:0, medium:n>=9?1:0, madman:n>=7?1:0, fox:0, haitoku:0, fanatic:0, nekomata:0, teruteru:0, hunter:0, twins:0, dictator:0, god:0, lover:0, villager:0};
   cfg.villager = n - (cfg.wolf+cfg.seer+cfg.knight+cfg.medium+cfg.madman);
   return cfg;
 }
@@ -48,6 +50,8 @@ export class RoomDO {
     if(this.data.phase==="lobby") return false;
     if(w===0 || w>=v){
       if(this.foxAlive()){ this.data.phase="end"; this.data.winner="fox"; this.data.endReason="ゲーム終了時に妖狐が生き残っていました。妖狐陣営の勝利です。"; }
+      else if(this.data.players.some(p=>p.alive&&p.role==="god")){ this.data.phase="end"; this.data.winner="god"; this.data.endReason="ゲーム終了時に神様が生き残っていました。神様の単独勝利です。"; }
+      else if(this.data.players.filter(p=>p.role==="lover").length===2 && this.data.players.filter(p=>p.role==="lover").every(p=>p.alive)){ this.data.phase="end"; this.data.winner="lover"; this.data.endReason="恋人2人が最後まで生き残りました。恋人ペアの勝利です。"; }
       else if(w===0){ this.data.phase="end"; this.data.winner="village"; this.data.endReason="人狼が全員いなくなりました。"; }
       else { this.data.phase="end"; this.data.winner="wolf"; this.data.endReason="人狼の数が村人側と同数以上になりました。"; }
       return true;
@@ -74,6 +78,53 @@ export class RoomDO {
     const nekoDone = d.day===1 || !neko || !d.players.some(p=>!p.alive) || n.nekoActed || neko.left; // 初日の夜は占いだけ
     return wolfDone && seerDone && knightDone && nekoDone;
   }
+  loverChain(deaths){
+    const d=this.data;
+    let added=true;
+    while(added){
+      added=false;
+      for(const p of [...deaths]){
+        if(p.role==="lover"){
+          const partner=d.players.find(x=>x.role==="lover"&&x.id!==p.id);
+          if(partner && partner.alive){ partner.alive=false; deaths.push(partner); added=true; d.publicLog.push("恋人の道連れで "+partner.name+" が死亡"); }
+        }
+      }
+    }
+    return deaths;
+  }
+  maybeHunter(deaths, sources, resume){
+    const d=this.data;
+    const h=deaths.find(p=>p.role==="hunter");
+    if(h && sources.includes("attack") || h && sources.includes("execute") || h && sources.includes("dictate") || h && sources.includes("shot")){
+      d.pendingHunter=h.id; d.hunterResume=resume; d.phase="hunterShot";
+      d.publicLog.push("ハンター "+h.name+" が倒れたため、道連れの機会が発生した");
+      return true;
+    }
+    return false;
+  }
+  async finishHunterShot(shooter, targetId){
+    const d=this.data;
+    let chained=null;
+    if(targetId!==null && targetId!==undefined && targetId>=0){
+      const tp=d.players[targetId];
+      if(tp && tp.alive){
+        tp.alive=false;
+        const deaths=[tp];
+        if(tp.role==="fox"){ this.killFoxFollowers().forEach(p=>deaths.push(p)); }
+        this.loverChain(deaths);
+        d.publicLog.push("ハンターの道連れで "+tp.name+" が死亡");
+        if(d.hunterResume==="morning") d.morningMsg+=" さらに、ハンターの道連れで "+tp.name+" さんが死亡しました。";
+        if(d.hunterResume==="voteResult") d.voteMsg+=" さらに、ハンターの道連れで "+tp.name+" さんが死亡しました。";
+        if(tp.role==="hunter") chained=tp;
+      }
+    } else {
+      d.publicLog.push("ハンターは道連れをしなかった");
+    }
+    if(chained){ d.pendingHunter=chained.id; d.phase="hunterShot"; return; }
+    d.pendingHunter=null;
+    d.phase=d.hunterResume||"morning";
+    this.checkWin();
+  }
   async resolveNight(){
     const d=this.data, n=d.night;
     const deaths=[];
@@ -89,6 +140,7 @@ export class RoomDO {
     }
     const followers=this.killFoxFollowers();
     followers.forEach(p=>{ deaths.push(p); d.publicLog.push(d.day+"日目朝：背徳者が道連れで死亡"); });
+    this.loverChain(deaths);
     let msg="";
     if(deaths.length) msg=deaths.map(p=>p.name+" さん").join("、")+"が無残な姿で発見されました。";
     else msg="昨晩は誰も死にませんでした。";
@@ -100,7 +152,10 @@ export class RoomDO {
     deaths.forEach(p=>d.publicLog.push(d.day+"日目朝："+p.name+" が死亡"));
     d.lastGuard = (n.guard===undefined? null:n.guard);
     d.phase="morning";
-    this.checkWin();
+    const atkVictim = (n.kill!==null && n.kill!==undefined) ? d.players[n.kill] : null;
+    if(!(atkVictim && atkVictim.role==="hunter" && deaths.includes(atkVictim) && this.maybeHunter(deaths,["attack"],"morning"))){
+      this.checkWin();
+    }
   }
   resolveVote(){
     const d=this.data, count={};
@@ -121,6 +176,12 @@ export class RoomDO {
       if(t.role==="fox"){
         const fol=this.killFoxFollowers();
         if(fol.length){ d.voteMsg+=" さらに "+fol.map(p=>p.name).join("、")+" さんが死亡しました。"; d.publicLog.push(d.day+"日目：背徳者が道連れで死亡"); }
+      }
+      const lcDeaths=[t]; this.loverChain(lcDeaths);
+      if(lcDeaths.length>1){ d.voteMsg+=" さらに恋人の "+lcDeaths.slice(1).map(p=>p.name).join("、")+" さんが道連れで死亡しました。"; }
+      if(t.role==="hunter"){
+        d.phase="voteResult";
+        if(this.maybeHunter([t],["execute"],"voteResult")) return;
       }
       // medium result (private)
       const med=d.players.find(p=>p.role==="medium");
@@ -154,12 +215,22 @@ export class RoomDO {
       if(me.role==="wolf") v.wolfMates=d.players.filter(p=>p.role==="wolf"&&p.id!==me.id).map(p=>p.name);
       if(me.role==="fanatic") v.wolfMates=d.players.filter(p=>p.role==="wolf").map(p=>p.name);
       if(me.role==="haitoku"){ const fx=d.players.find(p=>p.role==="fox"); v.foxName=fx?fx.name:null; }
+      if(me.role==="twins"){ v.twinMates=d.players.filter(p=>p.role==="twins"&&p.id!==me.id).map(p=>p.name); }
+      if(me.role==="lover"){ const lv=d.players.find(p=>p.role==="lover"&&p.id!==me.id); v.loverName=lv?lv.name:null; }
+      if(me.role==="god"){ v.allRoles=d.players.map(p=>({name:p.name, role:ROLE_DEFS[p.role].name, alive:p.alive})); }
       if(d.seerResults && d.seerResults[me.id]) v.seerResult=d.seerResults[me.id];
       if(d.mediumResult && d.mediumResult.forId===me.id && me.role==="medium") v.mediumResult=d.mediumResult;
     }
     if(d.phase==="end"){ v.allRoles=d.players.map(p=>({name:p.name, role:ROLE_DEFS[p.role].name, alive:p.alive})); }
     // pending action for me
     v.action=null; v.acted=false; v.canAdvance=false;
+    if(me && d.phase==="hunterShot"){
+      if(me.id===d.pendingHunter) v.action={type:"hunter", title:"🏹 ハンター：道連れにする人を選んでください", targets:this.alive().filter(p=>p.id!==me.id).map(p=>({id:p.id,name:p.name}))};
+      else v.waitInfo="ハンターが道連れを選んでいます…";
+    }
+    if(me && me.alive && d.phase==="discussion" && me.role==="dictator" && !me.dictUsed){
+      v.action={type:"dictator", title:"👑 独裁者：正体を明かして議論を終わらせ、1人を追放できます（ゲーム中1回だけ）", targets:this.alive().filter(p=>p.id!==me.id).map(p=>({id:p.id,name:p.name}))};
+    }
     if(me && me.alive){
       const n=d.night;
       if(d.phase==="night"){
@@ -185,7 +256,7 @@ export class RoomDO {
         else v.acted=true;
       }
     }
-    if(me && me.id===d.hostId && ["night","morning","discussion","voting","voteResult"].includes(d.phase)) v.canAdvance=true;
+    if(me && me.id===d.hostId && ["night","morning","discussion","voting","voteResult","hunterShot"].includes(d.phase)) v.canAdvance=true;
     // progress hints
     if(d.phase==="night") v.waiting="夜の行動が終わるのを待っています…";
     if(d.phase==="voting") v.waiting="全員の投票を待っています（"+Object.keys(d.votes).length+"/"+this.alive().length+"）";
@@ -265,6 +336,8 @@ export class RoomDO {
       const cfgTotal=ROLE_KEYS.reduce((a,k)=>a+(cfg[k]||0),0);
       if(cfgTotal!==n) return json({error:"役職の合計（"+cfgTotal+"）が人数（"+n+"）と一致していません"},400);
       if(!cfg.wolf) return json({error:"人狼が0人です"},400);
+      if(cfg.twins===1) return json({error:"共有者は2人以上必要です"},400);
+      if(cfg.lover===1 || cfg.lover>2) return json({error:"恋人はちょうど2人必要です"},400);
       const deck=[]; Object.keys(cfg).forEach(k=>{ for(let i=0;i<cfg[k];i++) deck.push(k); });
       shuffle(deck);
       this.data.players.forEach((p,i)=>{ p.role=deck[i]; p.alive=true; });
@@ -355,6 +428,41 @@ export class RoomDO {
       await this.save();
       return json(this.view(me));
     }
+    if(path==="/hunter"){
+      const d=this.data;
+      if(d.phase!=="hunterShot") return json({error:"今は道連れできません"},400);
+      const target=Number(body.target);
+      const isPendingHost = me.id===d.hostId && me.id!==d.pendingHunter;
+      if(me.id!==d.pendingHunter && !isPendingHost) return json({error:"ハンターだけが選べます"},403);
+      if(me.id!==d.pendingHunter && target!==-1) return json({error:"ホストはスキップだけできます"},403);
+      const shooter=d.players[d.pendingHunter];
+      await this.finishHunterShot(shooter, target);
+      await this.save();
+      return json(this.view(me));
+    }
+    if(path==="/dictate"){
+      const d=this.data;
+      if(d.phase!=="discussion" || !me.alive) return json({error:"今は独裁できません"},400);
+      if(me.role!=="dictator" || me.dictUsed) return json({error:"独裁は使えません"},400);
+      const target=Number(body.target); const tp=d.players[target];
+      if(!tp || !tp.alive || tp.id===me.id) return json({error:"対象が不正です"},400);
+      me.dictUsed=true;
+      tp.alive=false;
+      const deaths=[tp];
+      if(tp.role==="fox"){ this.killFoxFollowers().forEach(p=>deaths.push(p)); }
+      this.loverChain(deaths);
+      d.publicLog.push("👑 "+me.name+" が独裁者として正体を明かし、"+tp.name+" を追放した");
+      d.voteDetail=me.name+"（独裁者）の独断で追放";
+      d.voteMsg=tp.name+" さんが独裁者によって追放されました。";
+      if(deaths.length>1) d.voteMsg+=" さらに "+deaths.slice(1).map(p=>p.name).join("、")+" さんが死亡しました。";
+      const med=d.players.find(p=>p.role==="medium");
+      if(med) d.mediumResult={forId:med.id, targetName:tp.name, isWolf:tp.role==="wolf", day:d.day};
+      d.phase="voteResult";
+      if(tp.role==="hunter"){ if(this.maybeHunter([tp],["dictate"],"voteResult")){ await this.save(); return json(this.view(me)); } }
+      this.checkWin();
+      await this.save();
+      return json(this.view(me));
+    }
     if(path==="/advance"){
       const d=this.data;
       if(me.id!==d.hostId) return json({error:"ホストだけが進められます"},403);
@@ -362,6 +470,7 @@ export class RoomDO {
       else if(d.phase==="discussion"){ d.phase="voting"; d.votes={}; }
       else if(d.phase==="voting"){ this.resolveVote(); }
       else if(d.phase==="night"){ await this.resolveNight(); }
+      else if(d.phase==="hunterShot"){ await this.finishHunterShot(d.players[d.pendingHunter], -1); }
       else if(d.phase==="voteResult"){
         d.day++; d.phase="night"; d.night={kill:null, guard:null, seerActed:false, knightActed:false, nekoActed:false, revive:null, curseFox:null}; d.voteMsg=""; d.voteDetail="";
       } else return json({error:"今は進められません"},400);
@@ -387,6 +496,7 @@ export class RoomDO {
           const cand=d.players.filter(p=>p.id!==me.id && !p.left).sort((a,b)=>((b.alive?1:0)-(a.alive?1:0)) || ((b.lastSeen||0)-(a.lastSeen||0)))[0];
           if(cand){ d.hostId=cand.id; d.publicLog.push(cand.name+" さんがホストになりました"); }
         }
+        if(d.phase==="hunterShot" && d.pendingHunter===me.id) await this.finishHunterShot(me, -1);
         if(d.phase==="night" && this.nightComplete()) await this.resolveNight();
         if(d.phase==="voting" && Object.keys(d.votes).length>=this.alive().filter(p=>!p.left).length && Object.keys(d.votes).length>0) this.resolveVote();
         await this.save();
