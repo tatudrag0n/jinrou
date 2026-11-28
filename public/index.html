@@ -287,8 +287,8 @@ const ROLES = {
 };
 const ROLE_ORDER = ["wolf","seer","knight","medium","madman","fanatic","fox","haitoku","nekomata","teruteru","villager"];
 function defaultRoles(n){
-  // n: 4..15
-  const wolves = n>=13?3:(n>=7?2:1);
+  // n: 4..30
+  const wolves = n>=26?6:(n>=21?5:(n>=16?4:(n>=13?3:(n>=7?2:1))));
   const cfg = {wolf:wolves, seer:1, knight:n>=6?1:0, medium:n>=9?1:0, madman:n>=7?1:0, fox:0, haitoku:0, fanatic:0, nekomata:0, teruteru:0, villager:0};
   let used = cfg.wolf+cfg.seer+cfg.knight+cfg.medium+cfg.madman;
   cfg.villager = n-used;
@@ -321,7 +321,7 @@ function show(id){
 
 // ===== Setup UI =====
 const pcSel = $("playerCount");
-for(let n=4;n<=15;n++){ const o=document.createElement("option"); o.value=n; o.textContent=n; if(n===7)o.selected=true; pcSel.appendChild(o); }
+for(let n=4;n<=30;n++){ const o=document.createElement("option"); o.value=n; o.textContent=n; if(n===7)o.selected=true; pcSel.appendChild(o); }
 let roleCfg = defaultRoles(7);
 function buildNames(){
   const n = parseInt(pcSel.value,10);
