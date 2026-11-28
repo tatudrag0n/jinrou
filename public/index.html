@@ -819,8 +819,8 @@ function renderOnline(v){
   } else cfgCard.classList.add("hidden");
   $("ogStart").classList.toggle("hidden", !(v.isHost&&v.phase==="lobby"));
   $("ogAdvance").classList.toggle("hidden", !v.canAdvance);
-  $("ogAdvance").textContent = v.phase==="voting" ? "ホスト：投票を締め切る（未投票の人は棄権）" : "ホスト：次へ進める";
-  $("ogPlayers").innerHTML=v.players.map(p=>"<span class='chip "+(p.alive?"":"dead")+"'>"+(p.alive?"🟢":"💀")+" "+p.name+(p.host?"（ホスト）":"")+"</span>").join("");
+  $("ogAdvance").textContent = v.phase==="voting" ? "ホスト：投票を締め切る（未投票の人は棄権）" : (v.phase==="night" ? "ホスト：夜を進める（未行動の人は行動なしで確定）" : "ホスト：次へ進める");
+  $("ogPlayers").innerHTML=v.players.map(p=>"<span class='chip "+(p.alive?"":"dead")+"'>"+(p.alive?"🟢":"💀")+" "+p.name+(p.host?"（ホスト）":"")+(p.idle&&v.phase!=="lobby"?" 😴応答なし":"")+"</span>").join("");
   $("ogLog").textContent=(v.publicLog||[]).join("\n");
 }
 $("ogStart").onclick=async()=>{ try{ const v=await post("/api/start",{room:O.room,pid:O.pid,token:O.token}); renderOnline(v); }catch(e){ alert(e.message); } };
